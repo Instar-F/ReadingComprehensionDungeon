@@ -1,7 +1,7 @@
 <?php
 // Database config - update with your environment credentials
 $DB_HOST = '127.0.0.1';
-$DB_NAME = 'laroportal_db';
+$DB_NAME = 'RCDungeon';
 $DB_USER = 'root';
 $DB_PASS = ''; // set your MySQL password
 
