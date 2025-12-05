@@ -1,0 +1,107 @@
+body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+.card { box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
+.display-6 { font-size: 2.2rem; }
+
+/* Accessibility: larger buttons for target group */
+.btn { padding: .6rem .9rem; }
+
+/* Background using provided artwork - save the attached image as:
+	 assets/images/dungeon-bg.jpg
+	 If you put it somewhere else, update the URL below. */
+.dungeon-bg {
+	min-height: 100vh;
+	position: relative;
+	color: #f3f4f6;
+	background-image: url('../images/dungeon-bg.jpg');
+	background-size: cover;
+	background-position: center center;
+}
+
+/* subtle overlay to darken the image for readable text */
+.dungeon-bg::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(180deg, rgba(2,6,23,0.55), rgba(2,6,23,0.55));
+	pointer-events: none;
+}
+
+/* Game-like container centered */
+.game-stage {
+	position: relative;
+	z-index: 2;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	padding: 3rem 1rem;
+	min-height: calc(100vh - 80px);
+}
+
+.arcade-shell {
+	width: min(980px, 96%);
+	border-radius: 14px;
+	padding: 2rem;
+	display:flex;
+	flex-direction:column;
+	align-items:center;
+}
+
+/* Big central 'Enter' button - flash-style */
+.enter-btn {
+	width: clamp(200px, 40vw, 420px);
+	height: clamp(110px, 22vw, 150px);
+	border-radius: 14px;
+	background: linear-gradient(180deg,#ffcb6b,#ff9f1c);
+	color: #111827;
+	display:flex;
+	flex-direction:column;
+	align-items:center;
+	justify-content:center;
+	font-weight:800;
+	text-decoration:none;
+	transition: transform .15s ease, box-shadow .15s ease;
+}
+.secondary-btn {
+	width: clamp(200px, 40vw, 420px);
+	height: clamp(110px, 22vw, 100px);
+	border-radius: 14px;
+	background: linear-gradient(180deg,#ffcb6b,#b97514);
+	color: #111827;
+	display:flex;
+	flex-direction:column;
+	align-items:center;
+	justify-content:center;
+	font-weight:800;
+	text-decoration:none;
+	transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.enter-btn:hover, .enter-btn:focus { transform: translateY(-6px) scale(1.02); }
+.enter-btn .big { font-family: 'Press Start 2P', monospace; font-size: clamp(16px,2.4vw,28px); }
+.enter-btn .small { font-size: .85rem; color: rgba(17,24,39,0.85); margin-top:6px; }
+
+.secondary-buttons { margin-top:1.5rem; display:grid; gap:1rem; justify-content:center; }
+.secondary-btn { padding:.75rem 1rem; border-radius:10px; text-decoration:none; min-width:140px; text-align:center; }
+.secondary-btn:hover, .secondary:focus { transform: translateY(-4px); }
+
+/* Top-right hero icon */
+.hero-top {
+	position: absolute;
+	top: 14px;
+	right: 18px;
+	z-index: 3;
+	display:flex;
+	gap:.5rem;
+	align-items:center;
+}
+.hero-avatar { width:48px;height:48px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:white;background:linear-gradient(180deg,#3b82f6,#6366f1);box-shadow:0 6px 14px rgba(0,0,0,0.5); }
+.hero-pill { background: rgba(0,0,0,0.45); color: #fff; padding:.4rem .6rem; border-radius:999px; font-weight:600; font-size:.9rem; box-shadow: 0 6px 14px rgba(0,0,0,0.45); }
+
+/* small accessibility tweak */
+.enter-btn:focus-visible, .secondary:focus-visible { outline: 3px solid rgba(255,159,28,0.18); }
+
+@media (max-width: 600px) {
+	.arcade-shell { padding: 1rem; }
+	.hero-avatar { width:40px;height:40px; }
+	.hero-pill { display:none; }
+}
