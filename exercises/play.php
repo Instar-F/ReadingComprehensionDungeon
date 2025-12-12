@@ -170,8 +170,20 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             $totalPossiblePoints += isset($meta['points']) ? (int)$meta['points'] : 10;
         }
 
-        // Calculate percentage
-        $percentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
+// Count how many questions were answered correctly
+$correctQ = $pdo->prepare("SELECT COUNT(*) AS correct_count FROM attempt_answers WHERE attempt_id=? AND correct=1");
+$correctQ->execute([$attemptId]);
+$correctCount = (int)$correctQ->fetch(PDO::FETCH_ASSOC)['correct_count'];
+
+// Count total number of questions in the exercise
+$totalQ = $pdo->prepare("SELECT COUNT(*) AS total_count FROM questions WHERE exercise_id=?");
+$totalQ->execute([$exerciseId]);
+$totalQuestions = (int)$totalQ->fetch(PDO::FETCH_ASSOC)['total_count'];
+
+// Calculate percentage based on correct vs total questions
+$percentage = ($totalQuestions > 0) ? ($correctCount / $totalQuestions) * 100 : 0;
+$EXPpercentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
+
 
         // Determine reward based on percentage
         $reward = 'coal';
@@ -252,6 +264,7 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             'bonus_xp' => $bonusXP,
             'reward' => $reward,
             'percentage' => round($percentage, 1),
+            'EXPpercentage' => round($EXPpercentage, 1),
             'answers' => $answers,
             'new_level' => $newLevel,
             'leveled_up' => $leveledUp,
@@ -935,6 +948,7 @@ async function confirmAnswer() {
                     <h3>Du fick ${json.xp_earned} XP</h3>
                     <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
                     <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                    <div>% av EXP: ${json.EXPpercentage}%</div>
                 `;
                 rewardImg.src = '../assets/img/' + json.reward + '.png';
                 rewardImg.style.display = 'block';
@@ -947,6 +961,7 @@ async function confirmAnswer() {
                         <h4>Du har redan tjänat allt du kan från denna uppgift.</h4>
                         <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
                         <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                    <div>% av EXP: ${json.EXPpercentage}%</div>
                     `;
                 } else {
                     // Actually failed this attempt
@@ -954,6 +969,7 @@ async function confirmAnswer() {
                         <h3>Tyvärr, du fick 0 XP denna gång</h3>
                         <h4>Försök igen för att tjäna XP.</h4>
                         <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                    <div>% av EXP: ${json.EXPpercentage}%</div>
                     `;
                 }
                 rewardImg.style.display = 'none';
