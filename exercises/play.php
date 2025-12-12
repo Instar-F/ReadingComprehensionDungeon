@@ -360,6 +360,7 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?php echo htmlspecialchars($exercise['title']); ?> — Öva</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/style.css">
 <style>
 * {
     box-sizing: border-box;
@@ -612,7 +613,7 @@ textarea.form-control:focus {
 </style>
 </head>
 <body>
-    
+
 <div class="timer-display" id="timerDisplay" style="display:none !important;">00:00</div>
 
 <div class="container py-4">
@@ -629,7 +630,7 @@ textarea.form-control:focus {
         <h5 class="mb-3">Läs texten</h5>
         <div id="passageContent"><?php echo htmlspecialchars($passage['content'] ?? ''); ?></div>
         <button id="startBtn" class="btn btn-warning mt-3 w-100">Gå vidare till frågor →</button>
-            <div class="requirements-box mt-2 order-*">
+            <div class="mt-2 order-*">
              <div class="mb-2"><strong>Din bästa prestation:</strong></div>
                 <?php if ($bestAttempt): ?>
                 <div>Belöning: <?php echo htmlspecialchars($bestAttempt['reward']); ?></div>
@@ -639,7 +640,33 @@ textarea.form-control:focus {
                     <div>Inga tidigare försök</div>
                 <?php endif; ?>
             </div>
+            <div class="mt-2 text-center">
+                    <strong>Belöningskrav:</strong>
+                <div class="mt-3">
+                    <div class="req-item">
+                            <img src="../assets/img/copper.png" class="req-icon"> 70% rätt
+                    </div>
+                    <div class="req-item">
+                        <img src="../assets/img/iron.png" class="req-icon"> 80% rätt
+                    </div>
+                    <div class="req-item">
+                        <img src="../assets/img/gold.png" class="req-icon"> 90% rätt
+                    </div>
+                    <div class="req-item">
+                        <img src="../assets/img/diamond.png" class="req-icon"> 100% rätt
+                    </div>
+                    
+                    <?php
+                    $metadata = json_decode($exercise['metadata'] ?? '{}', true);
+                    $emeraldSeconds = isset($metadata['time_limit']) ? (int)$metadata['time_limit'] : 60;
+                    ?>
+                </div>
+                    <div class="req-item-emerald">
+                        <img src="../assets/img/emerald.png" class="req-icon">
+                        100% rätt + under <?= $emeraldSeconds ?> sekunder
+                    </div>
             </div>
+        </div>
 
     <!-- Question Area -->
     <div id="questionArea" style="display:none;">
