@@ -904,8 +904,8 @@ function renderQuestion() {
     questionContent.textContent = question.content;
     answerArea.innerHTML = '';
 
-    if (q.type === 'mcq' || q.type === 'truefalse') {
-        const shuffled = [...q.choices].sort(() => Math.random() - 0.5);
+    if (question.type === 'mcq' || question.type === 'truefalse') {
+        const shuffled = [...question.choices].sort(() => Math.random() - 0.5);
         const container = document.createElement('div');
         container.className = 'list-group';
         shuffled.forEach(ch => {
@@ -920,10 +920,10 @@ function renderQuestion() {
             container.appendChild(btn);
         });
         answerArea.appendChild(container);
-    } else if (q.type === 'ordering') {
+    } else if (question.type === 'ordering') {
         const list = document.createElement('div');
         list.id = 'orderingList';
-        const items = [...(q.meta.items || [])];
+        const items = [...(question.meta.items || [])];
         
         // Shuffle items for random start
         items.sort(() => Math.random() - 0.5);
