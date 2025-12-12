@@ -89,14 +89,87 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                     $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
-
                 case 'fillblank':
+                    $answers = $userAnswer['answers'] ?? [];
+                    $blankStmt = $pdo->prepare("SELECT correct_text FROM blanks WHERE question_id=? ORDER BY blank_index ASC");
+                    $blankStmt->execute([$questionId]);
+                    $correctAnswers = array_column($blankStmt->fetchAll(PDO::FETCH_ASSOC), 'correct_text');
+
+                    $ok = count($answers) === count($correctAnswers);
+                    if ($ok) {
+                        foreach ($answers as $i => $a) {
+                            if (trim(strtolower($a)) !== trim(strtolower($correctAnswers[$i] ?? ''))) {
+                                $ok = false;
+                                break;
+                            }
+                        }
+                    }
+                    $isCorrect = $ok ? 1 : 0;
+                    $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
-                case 'ordering':
-                    break;
+                    case 'ordering':
+                        $order = $userAnswer['order'] ?? [];
+                                        
+                        // Get correct order from ordering_items table
+                        $orderStmt = $pdo->prepare("SELECT id FROM ordering_items WHERE question_id=? ORDER BY correct_pos ASC");
+                        $orderStmt->execute([$questionId]);
+                        $correctOrder = array_column($orderStmt->fetchAll(PDO::FETCH_ASSOC), 'id');
+                                        
+                        $totalItems = count($correctOrder);
+                                        
+                        if ($totalItems > 0) {
+                            // Count correct sequential pairs (items that appear in correct relative order)
+                            $correctPairs = 0;
+                            $totalPairs = max(0, $totalItems - 1);
+                                            
+                            for ($i = 0; $i < count($order) - 1; $i++) {
+                                $currentId = (int)$order[$i];
+                                $nextId = (int)$order[$i + 1];
+                                                
+                                // Check if this pair appears in the same order in correct sequence
+                                $currentPos = array_search($currentId, $correctOrder);
+                                $nextPos = array_search($nextId, $correctOrder);
+                                                
+                                if ($currentPos !== false && $nextPos !== false && $nextPos === $currentPos + 1) {
+                                    $correctPairs++;
+                                }
+                            }
+                                            
+                            // Award points based on correct sequential pairs
+                            if ($totalPairs > 0) {
+                                $percentageCorrect = $correctPairs / $totalPairs;
+                                $awardedPoints = (int)($pointsForQuestion * $percentageCorrect);
+                            } else {
+                                $awardedPoints = 0;
+                            }
+                                            
+                            $isCorrect = ($order === $correctOrder) ? 1 : 0;
+                        } else {
+                            $awardedPoints = 0;
+                            $isCorrect = 0;
+                        }
+                        break;
+
 
                 case 'matching':
+                    $pairs = $userAnswer['pairs'] ?? [];
+                    $matchStmt = $pdo->prepare("SELECT left_index, right_index FROM matching_pairs WHERE question_id=?");
+                    $matchStmt->execute([$questionId]);
+                    $correctPairs = [];
+                    foreach ($matchStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                        $correctPairs[$row['left_index']] = $row['right_index'];
+                    }
+
+                    $ok = true;
+                    foreach ($correctPairs as $l => $r) {
+                        if (!isset($pairs[$l]) || (int)$pairs[$l] !== (int)$r) {
+                            $ok = false;
+                            break;
+                        }
+                    }
+                    $isCorrect = $ok ? 1 : 0;
+                    $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
                 default:
@@ -154,123 +227,126 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 exit;
             }
 
-                    // Calculate total points earned in this attempt
-        $sumQ = $pdo->prepare("SELECT COALESCE(SUM(points_awarded), 0) AS total FROM attempt_answers WHERE attempt_id=?");
-        $sumQ->execute([$attemptId]);
-        $totalPoints = (int)($sumQ->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+            // Get exercise info for metadata
+            $exStmt = $pdo->prepare("SELECT * FROM exercises WHERE id=?");
+            $exStmt->execute([$exerciseId]);
+            $exercise = $exStmt->fetch(PDO::FETCH_ASSOC);
 
-        // Get total possible points for the exercise
-        $qstm = $pdo->prepare("SELECT meta FROM questions WHERE exercise_id=?");
-        $qstm->execute([$exerciseId]);
-        $allQuestions = $qstm->fetchAll(PDO::FETCH_ASSOC);
+            // Calculate total points earned in this attempt
+            $sumQ = $pdo->prepare("SELECT COALESCE(SUM(points_awarded), 0) AS total FROM attempt_answers WHERE attempt_id=?");
+            $sumQ->execute([$attemptId]);
+            $totalPoints = (int)($sumQ->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
 
-        $totalPossiblePoints = 0;
-        foreach ($allQuestions as $q) {
-            $meta = $q['meta'] ? json_decode($q['meta'], true) : [];
-            $totalPossiblePoints += isset($meta['points']) ? (int)$meta['points'] : 10;
-        }
+            // Get total possible points for the exercise
+            $qstm = $pdo->prepare("SELECT meta FROM questions WHERE exercise_id=?");
+            $qstm->execute([$exerciseId]);
+            $allQuestions = $qstm->fetchAll(PDO::FETCH_ASSOC);
 
-// Count how many questions were answered correctly
-$correctQ = $pdo->prepare("SELECT COUNT(*) AS correct_count FROM attempt_answers WHERE attempt_id=? AND correct=1");
-$correctQ->execute([$attemptId]);
-$correctCount = (int)$correctQ->fetch(PDO::FETCH_ASSOC)['correct_count'];
+            $totalPossiblePoints = 0;
+            foreach ($allQuestions as $q) {
+                $meta = $q['meta'] ? json_decode($q['meta'], true) : [];
+                $totalPossiblePoints += isset($meta['points']) ? (int)$meta['points'] : 10;
+            }
 
-// Count total number of questions in the exercise
-$totalQ = $pdo->prepare("SELECT COUNT(*) AS total_count FROM questions WHERE exercise_id=?");
-$totalQ->execute([$exerciseId]);
-$totalQuestions = (int)$totalQ->fetch(PDO::FETCH_ASSOC)['total_count'];
+            // Count how many questions were answered correctly
+            $correctQ = $pdo->prepare("SELECT COUNT(*) AS correct_count FROM attempt_answers WHERE attempt_id=? AND correct=1");
+            $correctQ->execute([$attemptId]);
+            $correctCount = (int)$correctQ->fetch(PDO::FETCH_ASSOC)['correct_count'];
 
-// Calculate percentage based on correct vs total questions
-$percentage = ($totalQuestions > 0) ? ($correctCount / $totalQuestions) * 100 : 0;
-$EXPpercentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
+            // Count total number of questions in the exercise
+            $totalQ = $pdo->prepare("SELECT COUNT(*) AS total_count FROM questions WHERE exercise_id=?");
+            $totalQ->execute([$exerciseId]);
+            $totalQuestions = (int)$totalQ->fetch(PDO::FETCH_ASSOC)['total_count'];
 
+            // Calculate percentage based on correct vs total questions
+            $percentage = ($totalQuestions > 0) ? ($correctCount / $totalQuestions) * 100 : 0;
+            $EXPpercentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
 
-        // Determine reward based on percentage
-        $reward = 'coal';
-        if ($percentage >= 70) $reward = 'copper';
-        if ($percentage >= 80) $reward = 'iron';
-        if ($percentage >= 90) $reward = 'gold';
-        if ($percentage >= 100) $reward = 'diamond';
+            // Determine reward based on percentage
+            $reward = 'coal';
+            if ($percentage >= 70) $reward = 'copper';
+            if ($percentage >= 80) $reward = 'iron';
+            if ($percentage >= 90) $reward = 'gold';
+            if ($percentage >= 100) $reward = 'diamond';
 
-     $metadata = json_decode($exercise['metadata'] ?? '{}', true);
-     $emeraldSeconds = isset($metadata['time_limit']) ? (int)$metadata['time_limit'] : 60;
-        // Time bonus for diamond performance
-        if ($reward === 'diamond' && $elapsedTime > 0 && $elapsedTime <= $emeraldSeconds) {
-            $reward = 'emerald';
-        }
+            $metadata = json_decode($exercise['metadata'] ?? '{}', true);
+            $emeraldSeconds = isset($metadata['time_limit']) ? (int)$metadata['time_limit'] : 60;
+            
+            // Time bonus for diamond performance
+            if ($reward === 'diamond' && $elapsedTime > 0 && $elapsedTime <= $emeraldSeconds) {
+                $reward = 'emerald';
+            }
 
-        // Calculate XP with bonus
-        $baseXP = $totalPoints;
-        $bonusXP = 0;
+            // Calculate XP with bonus
+            $baseXP = $totalPoints;
+            $bonusXP = 0;
 
-        switch ($reward) {
-            case 'iron':
-                $bonusXP = (int)($baseXP * 0.1);
-                break;
-            case 'silver':
-                $bonusXP = (int)($baseXP * 0.25);
-                break;
-            case 'gold':
-                $bonusXP = (int)($baseXP * 0.5);
-                break;
-            case 'diamond':
-                $bonusXP = (int)($baseXP * 1.0);
-                break;
-            case 'emerald':
-                $bonusXP = (int)($baseXP * 2.0);
-                break;
-        }
+            switch ($reward) {
+                case 'iron':
+                    $bonusXP = (int)($baseXP * 0.1);
+                    break;
+                case 'silver':
+                    $bonusXP = (int)($baseXP * 0.25);
+                    break;
+                case 'gold':
+                    $bonusXP = (int)($baseXP * 0.5);
+                    break;
+                case 'diamond':
+                    $bonusXP = (int)($baseXP * 1.0);
+                    break;
+                case 'emerald':
+                    $bonusXP = (int)($baseXP * 2.0);
+                    break;
+            }
 
-        $finalXP = $baseXP + $bonusXP;
+            $finalXP = $baseXP + $bonusXP;
 
-        // --- NEW: Calculate incremental XP ---
-        $bestStmt = $pdo->prepare("SELECT MAX(score) as max_score FROM attempt_sessions WHERE user_id=? AND exercise_id=?");
-        $bestStmt->execute([$userId, $exerciseId]);
-        $prevBest = (int)($bestStmt->fetch(PDO::FETCH_ASSOC)['max_score'] ?? 0);
+            // Calculate incremental XP
+            $bestStmt = $pdo->prepare("SELECT MAX(score) as max_score FROM attempt_sessions WHERE user_id=? AND exercise_id=?");
+            $bestStmt->execute([$userId, $exerciseId]);
+            $prevBest = (int)($bestStmt->fetch(PDO::FETCH_ASSOC)['max_score'] ?? 0);
 
-        $incrementalXP = max(0, $finalXP - $prevBest);
-        
-        $earnedMax = ($incrementalXP === 0 && $finalXP === $prevBest);
+            $incrementalXP = max(0, $finalXP - $prevBest);
+            $earnedMax = ($incrementalXP === 0 && $finalXP === $prevBest);
 
+            // Update attempt session
+            $upd = $pdo->prepare("UPDATE attempt_sessions SET finished_at=NOW(), score=?, reward=?, elapsed_time=? WHERE id=?");
+            $upd->execute([$finalXP, $reward, $elapsedTime, $attemptId]);
 
-        // Update attempt session
-        $upd = $pdo->prepare("UPDATE attempt_sessions SET finished_at=NOW(), score=?, reward=?, elapsed_time=? WHERE id=?");
-        $upd->execute([$finalXP, $reward, $elapsedTime, $attemptId]);
+            // Update user points and calculate new level
+            $oldPoints = (int)$user['points'];
+            $newPoints = $oldPoints + $incrementalXP;
 
-        // Update user points and calculate new level
-        $oldPoints = (int)$user['points'];
-        $newPoints = $oldPoints + $incrementalXP;
+            // Level calculation: 100 XP per level
+            $newLevel = floor($newPoints / 100) + 1;
 
-        // Level calculation: 100 XP per level
-        $newLevel = floor($newPoints / 100) + 1;
+            $updUser = $pdo->prepare("UPDATE users SET points=?, level=? WHERE id=?");
+            $updUser->execute([$newPoints, $newLevel, $userId]);
 
-        $updUser = $pdo->prepare("UPDATE users SET points=?, level=? WHERE id=?");
-        $updUser->execute([$newPoints, $newLevel, $userId]);
+            $leveledUp = ($newLevel > (int)$user['level']);
 
-        $leveledUp = ($newLevel > (int)$user['level']);
+            $pdo->commit();
 
-        $pdo->commit();
+            // Fetch all answers for reporting
+            $answerStmt = $pdo->prepare("SELECT correct FROM attempt_answers WHERE attempt_id=? ORDER BY id ASC");
+            $answerStmt->execute([$attemptId]);
+            $answers = array_map(fn($a) => ((int)$a['correct'] === 1), $answerStmt->fetchAll(PDO::FETCH_ASSOC));
 
-        // Fetch all answers for reporting
-        $answerStmt = $pdo->prepare("SELECT correct FROM attempt_answers WHERE attempt_id=? ORDER BY id ASC");
-        $answerStmt->execute([$attemptId]);
-        $answers = array_map(fn($a) => ((int)$a['correct'] === 1), $answerStmt->fetchAll(PDO::FETCH_ASSOC));
-
-        echo json_encode([
-            'success' => true,
-            'score' => $finalXP,
-            'xp_earned' => $incrementalXP,
-            'base_xp' => $baseXP,
-            'bonus_xp' => $bonusXP,
-            'reward' => $reward,
-            'percentage' => round($percentage, 1),
-            'EXPpercentage' => round($EXPpercentage, 1),
-            'answers' => $answers,
-            'new_level' => $newLevel,
-            'leveled_up' => $leveledUp,
-            'maxed_out' => $earnedMax
-        ]);
-        exit;
+            echo json_encode([
+                'success' => true,
+                'score' => $finalXP,
+                'xp_earned' => $incrementalXP,
+                'base_xp' => $baseXP,
+                'bonus_xp' => $bonusXP,
+                'reward' => $reward,
+                'percentage' => round($percentage, 1),
+                'EXPpercentage' => round($EXPpercentage, 1),
+                'answers' => $answers,
+                'new_level' => $newLevel,
+                'leveled_up' => $leveledUp,
+                'maxed_out' => $earnedMax
+            ]);
+            exit;
         }
 
         http_response_code(400);
@@ -299,6 +375,7 @@ $questions = $qstm->fetchAll(PDO::FETCH_ASSOC);
 
 $questionIds = array_column($questions, 'id');
 $choicesMap = [];
+$orderingItemsMap = [];
 
 if (!empty($questionIds)) {
     $in = implode(',', array_fill(0, count($questionIds), '?'));
@@ -307,6 +384,14 @@ if (!empty($questionIds)) {
     $allChoices = $cstm->fetchAll(PDO::FETCH_ASSOC);
     foreach ($allChoices as $c) {
         $choicesMap[$c['question_id']][] = $c;
+    }
+    
+    // Fetch ordering items
+    $oStmt = $pdo->prepare("SELECT * FROM ordering_items WHERE question_id IN ($in) ORDER BY question_id, correct_pos ASC");
+    $oStmt->execute($questionIds);
+    $allOrderingItems = $oStmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($allOrderingItems as $item) {
+        $orderingItemsMap[$item['question_id']][] = $item;
     }
 }
 
@@ -326,12 +411,20 @@ foreach ($questions as $q) {
             $choicesMap[$q['id']] ?? []
         );
     } elseif ($q['type'] === 'truefalse') {
-        // Provide consistent true/false choices for frontend.
-        // ids are strings 'true' / 'false' to distinguish from numeric mcq ids.
         $clientChoices = [
             ['id' => 'true', 'content' => 'Sant', 'pos' => 1],
             ['id' => 'false', 'content' => 'Falskt', 'pos' => 2]
         ];
+    } elseif ($q['type'] === 'ordering') {
+        // Pass ordering items to frontend
+        $items = $orderingItemsMap[$q['id']] ?? [];
+        $meta['items'] = array_map(
+            fn($item) => [
+                'id' => (int)$item['id'],
+                'content' => $item['content']
+            ],
+            $items
+        );
     }
 
     $clientQuestions[] = [
@@ -343,6 +436,7 @@ foreach ($questions as $q) {
         'choices' => $clientChoices
     ];
 }
+
 $bestStmt = $pdo->prepare("
     SELECT reward, score, elapsed_time 
     FROM attempt_sessions 
@@ -413,7 +507,6 @@ textarea.form-control:focus {
     box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.25);
 }
 
-/* Progress container */
 .progress-wrapper {
     position: relative;
     margin-top: 1.5rem;
@@ -436,7 +529,6 @@ textarea.form-control:focus {
     box-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
 }
 
-/* Markers */
 .markers {
     position: absolute;
     top: 6px;
@@ -454,7 +546,6 @@ textarea.form-control:focus {
     transform: translateX(-50%);
 }
 
-/* Torch */
 .torch {
     position: absolute;
     top: -12px;
@@ -466,7 +557,6 @@ textarea.form-control:focus {
     filter: drop-shadow(0 2px 8px rgba(255, 193, 7, 0.6));
 }
 
-/* Chest */
 .chest {
     position: absolute;
     right: -16px;
@@ -477,7 +567,6 @@ textarea.form-control:focus {
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
 
-/* Question content styling */
 #questionContent {
     font-size: 1.1rem;
     line-height: 1.6;
@@ -497,7 +586,6 @@ textarea.form-control:focus {
     overflow-y: auto;
 }
 
-/* Answer buttons */
 .answer-btn {
     text-align: left;
     padding: 1rem;
@@ -516,7 +604,27 @@ textarea.form-control:focus {
     box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
 }
 
-/* Score area */
+/* Ordering styles */
+.ordering-item {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 8px;
+    cursor: move;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+
+.ordering-item:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+.ordering-item.dragging {
+    opacity: 0.5;
+    transform: scale(0.95);
+}
+
 #scoreArea {
     text-align: center;
 }
@@ -529,7 +637,6 @@ textarea.form-control:focus {
     filter: drop-shadow(0 4px 8px rgba(255, 193, 7, 0.4));
 }
 
-/* Responsive adjustments */
 @media (max-width: 768px) {
     .container {
         padding-left: 1rem;
@@ -568,44 +675,6 @@ textarea.form-control:focus {
     }
 }
 
-@media (max-width: 576px) {
-    .torch {
-        width: 28px;
-        height: 28px;
-        top: -6px;
-    }
-    
-    .chest {
-        width: 28px;
-        height: 28px;
-        right: -10px;
-        top: -4px;
-    }
-    
-    .progress-container {
-        height: 20px;
-    }
-    
-    .marker {
-        width: 12px;
-        height: 12px;
-    }
-    
-    .markers {
-        top: 4px;
-    }
-    
-    #questionContent {
-        font-size: 1rem;
-        padding: 0.75rem;
-    }
-    
-    .answer-btn {
-        padding: 0.75rem;
-    }
-}
-
-/* Loading state */
 .btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -617,7 +686,6 @@ textarea.form-control:focus {
 <div class="timer-display" id="timerDisplay" style="display:none !important;">00:00</div>
 
 <div class="container py-4">
-  <!-- Header -->
   <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h1 class="mb-0"><?php echo htmlspecialchars($exercise['title']); ?></h1>
     <a href="../exercises/entrance.php" class="btn btn-outline-light">← Tillbaka</a>
@@ -625,8 +693,7 @@ textarea.form-control:focus {
 
     <div id="stage" class="card p-4">
 
-    <!-- Passage Area -->
-        <div id="passageArea">
+    <div id="passageArea">
         <h5 class="mb-3">Läs texten</h5>
         <div id="passageContent"><?php echo htmlspecialchars($passage['content'] ?? ''); ?></div>
         <button id="startBtn" class="btn btn-warning mt-3 w-100">Gå vidare till frågor →</button>
@@ -731,8 +798,6 @@ const confirmBtn = document.getElementById('confirmBtn');
 const timerDisplay = document.getElementById('timerDisplay');
 const scoreArea = document.getElementById('scoreArea');
 const scoreResult = document.getElementById('scoreResult');
-const scoreText = document.getElementById('scoreText');
-const rewardText = document.getElementById('rewardText');
 const rewardImg = document.getElementById('rewardImg');
 const progressBar = document.getElementById('progressBar');
 const progressMarker = document.getElementById('progressMarker');
@@ -740,37 +805,31 @@ const markersDiv = document.getElementById('markers');
 const scoreProgressBar = document.getElementById('scoreProgressBar');
 const scoreMarkersDiv = document.getElementById('scoreMarkers');
 const retryBtn = document.getElementById('retryBtn');
+const levelBanner = document.getElementById('levelBanner');
 
+let attemptId = 0;
+let startedAt = null;
+let timerInterval = null;
 
-            let attemptId = 0;
-            let current = 0;
-            let answersCache = {}; // questionId -> answer payload
-            let startedAt = null;
-            let timerInterval = null;
+function formatTime(sec) {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = (sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+}
 
-            function formatTime(sec) {
-                const m = Math.floor(sec / 60).toString().padStart(2, '0');
-                const s = (sec % 60).toString().padStart(2, '0');
-                return `${m}:${s}`;
-            }
+function startTimer() {
+    startedAt = Date.now();
+    timerDisplay.style.display = 'none';
+    timerInterval = setInterval(() => {
+        const diff = Math.floor((Date.now() - startedAt) / 1000);
+        timerDisplay.textContent = formatTime(diff);
+    }, 1000);
+}
 
-            function startTimer() {
-                startedAt = Date.now();
-                //timerDisplay.style.display = 'block';
-                timerDisplay.style.display = 'none';
-                timerInterval = setInterval(() => {
-                    const diff = Math.floor((Date.now() - startedAt) / 1000);
-                    timerDisplay.textContent = formatTime(diff);
-                }, 1000);
-            }
-
-            function stopTimer() {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-
-
-
+function stopTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+}
 
 function updateProgress(showTorch = true, bar = progressBar, markerDiv = markersDiv, torchElement = progressMarker) {
     const percent = (correctness.length / questions.length) * 100;
@@ -845,27 +904,66 @@ function renderQuestion() {
     questionContent.textContent = question.content;
     answerArea.innerHTML = '';
 
-    if (question.type === 'mcq') {
-        question.choices.forEach(choice => {
-            const button = document.createElement('button');
-            button.className = 'btn btn-light answer-btn w-100';
-            button.textContent = choice.content;
-            // mcq ids are numeric
-            button.dataset.choiceId = choice.id;
-            button.addEventListener('click', () => selectChoice(button));
-            answerArea.appendChild(button);
+    if (q.type === 'mcq' || q.type === 'truefalse') {
+        const shuffled = [...q.choices].sort(() => Math.random() - 0.5);
+        const container = document.createElement('div');
+        container.className = 'list-group';
+        shuffled.forEach(ch => {
+            const btn = document.createElement('button');
+            btn.className = 'btn answer-btn btn-outline-light w-100 text-start';
+            btn.dataset.choiceId = ch.id;
+            btn.innerHTML = `<div>${ch.content}</div>`;
+            btn.addEventListener('click', () => {
+                Array.from(container.children).forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+            });
+            container.appendChild(btn);
         });
-    } else if (question.type === 'truefalse') {
-        // choices from server are id='true'/'false' with content Sant/Falskt
-        question.choices.forEach(choice => {
-            const button = document.createElement('button');
-            button.className = 'btn btn-light answer-btn w-100';
-            button.textContent = choice.content;
-            // keep choice id as string 'true' or 'false'
-            button.dataset.choiceId = String(choice.id);
-            button.addEventListener('click', () => selectChoice(button));
-            answerArea.appendChild(button);
+        answerArea.appendChild(container);
+    } else if (q.type === 'ordering') {
+        const list = document.createElement('div');
+        list.id = 'orderingList';
+        const items = [...(q.meta.items || [])];
+        
+        // Shuffle items for random start
+        items.sort(() => Math.random() - 0.5);
+        
+        items.forEach(it => {
+            const el = document.createElement('div');
+            el.className = 'ordering-item';
+            el.draggable = true;
+            el.dataset.id = it.id;
+            el.textContent = it.content;
+            el.addEventListener('dragstart', e => {
+                e.dataTransfer.setData('text/plain', it.id);
+                el.classList.add('dragging');
+            });
+            el.addEventListener('dragend', () => el.classList.remove('dragging'));
+            list.appendChild(el);
         });
+        
+        list.addEventListener('dragover', e => {
+            e.preventDefault();
+            const after = getDragAfterElement(list, e.clientY);
+            const dragging = list.querySelector('.dragging');
+            if (!dragging) return;
+            if (after == null) list.appendChild(dragging);
+            else list.insertBefore(dragging, after);
+        });
+        answerArea.appendChild(list);
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.ordering-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
     } else {
         const textarea = document.createElement('textarea');
         textarea.className = 'form-control';
@@ -900,8 +998,15 @@ async function confirmAnswer() {
             alert('Välj ett svar först');
             return;
         }
-        // keep string 'true' or 'false' — backend normalizes
         answerObj = { choice_id: selected.dataset.choiceId };
+    } else if (question.type === 'ordering') {
+        const list = document.getElementById('orderingList');
+        if (!list) {
+            alert('Ordna elementen först');
+            return;
+        }
+        const order = Array.from(list.children).map(el => parseInt(el.dataset.id, 10));
+        answerObj = { order: order };
     } else {
         const textarea = answerArea.querySelector('textarea');
         answerObj = { text: textarea.value.trim() };
@@ -935,7 +1040,7 @@ async function confirmAnswer() {
     }
 }
 
-    async function finishAttempt() {
+async function finishAttempt() {
     if (!attemptId) return alert('Inget aktivt försök.');
     stopTimer();
     const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
@@ -943,9 +1048,7 @@ async function confirmAnswer() {
     try {
         const res = await fetch(`?exercise_id=${exerciseId}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'finish_attempt',
                 attempt_id: attemptId,
@@ -956,30 +1059,23 @@ async function confirmAnswer() {
         const json = await res.json();
         
         if (json.success) {
-            // Update correctness array
             correctness = json.answers || correctness;
             
-            // Hide question area, show score area
-            document.getElementById('questionArea').style.display = 'none';
+            questionArea.style.display = 'none';
             scoreArea.style.display = 'block';
 
-
-            // Show final progress bar in score area
             const finalScoreProgressBar = document.getElementById('scoreProgressBar');
             const finalScoreMarkersDiv = document.getElementById('scoreMarkers');
             
             if (finalScoreProgressBar && finalScoreMarkersDiv) {
-                // Show progress at 90% first
                 updateProgress(false, finalScoreProgressBar, finalScoreMarkersDiv, null);
                 
-                // Then animate final sprint to 100%
                 setTimeout(() => {
                     finalScoreProgressBar.style.width = '100%';
                 }, 100);
             }
-            // Determine XP message
+
             if (json.xp_earned > 0) {
-                // Normal case: XP earned
                 scoreResult.innerHTML = `
                     <h3>Du fick ${json.xp_earned} XP</h3>
                     <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
@@ -989,33 +1085,26 @@ async function confirmAnswer() {
                 rewardImg.src = '../assets/img/' + json.reward + '.png';
                 rewardImg.style.display = 'block';
             } else {
-                // XP earned = 0
                 if (json.maxed_out) {
-                    // Already reached max XP for this exercise
                     scoreResult.innerHTML = `
                         <h3>Du tjänade 0 XP!</h3>
                         <h4>Du har redan tjänat allt du kan från denna uppgift.</h4>
                         <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
                         <div>Belöning: ${json.reward} – ${json.percentage}%</div>
-                    <div>% av EXP: ${json.EXPpercentage}%</div>
+                        <div>% av EXP: ${json.EXPpercentage}%</div>
                     `;
                 } else {
-                    // Actually failed this attempt
                     scoreResult.innerHTML = `
                         <h3>Tyvärr, du fick 0 XP denna gång</h3>
                         <h4>Försök igen för att tjäna XP.</h4>
                         <div>Belöning: ${json.reward} – ${json.percentage}%</div>
-                    <div>% av EXP: ${json.EXPpercentage}%</div>
+                        <div>% av EXP: ${json.EXPpercentage}%</div>
                     `;
                 }
                 rewardImg.style.display = 'none';
             }
 
-            // Level up banner
             if (json.leveled_up) {
-                if (typeof soundManager !== 'undefined') {
-                    soundManager.play('levelup');
-                }
                 levelBanner.style.display = 'block';
                 levelBanner.textContent = `Grattis! Du gick upp till nivå ${json.new_level}`;
             } else {
@@ -1037,7 +1126,6 @@ async function confirmAnswer() {
         alert('Serverfel vid avslut');
     }
 }
-
 
 startBtn.addEventListener('click', startAttempt);
 confirmBtn.addEventListener('click', confirmAnswer);
