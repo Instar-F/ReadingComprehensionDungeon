@@ -82,56 +82,21 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                     break;
 
                 case 'truefalse':
-                    // Expecting userAnswer['choice_id'] to be "true" or "false"
                     $raw = strtolower(trim((string)($userAnswer['choice_id'] ?? '')));
-                    
-                    // Normalize user input to 1/0
                     $userVal = ($raw === 'true') ? 1 : 0;
-
-                    // Read correct answer from DB (0 or 1)
                     $correctVal = (int)($question['correct_answer'] ?? 0);
-
-                    // Evaluate correctness
                     $isCorrect = ($userVal === $correctVal) ? 1 : 0;
                     $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
 
                 case 'fillblank':
-                    $answers = $userAnswer['answers'] ?? [];
-                    $correctAnswers = $meta['answers'] ?? [];
-                    $ok = count($answers) === count($correctAnswers);
-                    if ($ok) {
-                        foreach ($answers as $i => $a) {
-                            if (trim(strtolower($a)) !== trim(strtolower($correctAnswers[$i] ?? ''))) {
-                                $ok = false;
-                                break;
-                            }
-                        }
-                    }
-                    $isCorrect = $ok ? 1 : 0;
-                    $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
                 case 'ordering':
-                    $order = $userAnswer['order'] ?? [];
-                    $correct = $meta['correct_order'] ?? [];
-                    $isCorrect = ($order === $correct) ? 1 : 0;
-                    $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
                 case 'matching':
-                    $pairs = $userAnswer['pairs'] ?? [];
-                    $correct = $meta['correct_map'] ?? [];
-                    $ok = true;
-                    foreach ($correct as $l => $r) {
-                        if (!isset($pairs[$l]) || (string)$pairs[$l] !== (string)$r) {
-                            $ok = false;
-                            break;
-                        }
-                    }
-                    $isCorrect = $ok ? 1 : 0;
-                    $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
                 default:
@@ -168,93 +133,136 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
         }
 
         if ($action === 'finish_attempt') {
-    $attemptId = (int)($data['attempt_id'] ?? 0);
-    if (!$attemptId) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Missing attempt_id']);
+            $attemptId = (int)($data['attempt_id'] ?? 0);
+            $elapsedTime = (int)($data['elapsed_time'] ?? 0);
+
+            if (!$attemptId) {
+                http_response_code(400);
+                echo json_encode(['error' => 'Missing attempt_id']);
+                exit;
+            }
+
+            $pdo->beginTransaction();
+            $stm = $pdo->prepare("SELECT * FROM attempt_sessions WHERE id=? AND user_id=? FOR UPDATE");
+            $stm->execute([$attemptId, $userId]);
+            $attempt = $stm->fetch(PDO::FETCH_ASSOC);
+
+            if (!$attempt) {
+                $pdo->rollBack();
+                http_response_code(404);
+                echo json_encode(['error' => 'Attempt not found']);
+                exit;
+            }
+
+                    // Calculate total points earned in this attempt
+        $sumQ = $pdo->prepare("SELECT COALESCE(SUM(points_awarded), 0) AS total FROM attempt_answers WHERE attempt_id=?");
+        $sumQ->execute([$attemptId]);
+        $totalPoints = (int)($sumQ->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
+
+        // Get total possible points for the exercise
+        $qstm = $pdo->prepare("SELECT meta FROM questions WHERE exercise_id=?");
+        $qstm->execute([$exerciseId]);
+        $allQuestions = $qstm->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalPossiblePoints = 0;
+        foreach ($allQuestions as $q) {
+            $meta = $q['meta'] ? json_decode($q['meta'], true) : [];
+            $totalPossiblePoints += isset($meta['points']) ? (int)$meta['points'] : 10;
+        }
+
+        // Calculate percentage
+        $percentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
+
+        // Determine reward based on percentage
+        $reward = 'coal';
+        if ($percentage >= 70) $reward = 'copper';
+        if ($percentage >= 80) $reward = 'iron';
+        if ($percentage >= 90) $reward = 'gold';
+        if ($percentage >= 100) $reward = 'diamond';
+
+     $metadata = json_decode($exercise['metadata'] ?? '{}', true);
+     $emeraldSeconds = isset($metadata['time_limit']) ? (int)$metadata['time_limit'] : 60;
+        // Time bonus for diamond performance
+        if ($reward === 'diamond' && $elapsedTime > 0 && $elapsedTime <= $emeraldSeconds) {
+            $reward = 'emerald';
+        }
+
+        // Calculate XP with bonus
+        $baseXP = $totalPoints;
+        $bonusXP = 0;
+
+        switch ($reward) {
+            case 'iron':
+                $bonusXP = (int)($baseXP * 0.1);
+                break;
+            case 'silver':
+                $bonusXP = (int)($baseXP * 0.25);
+                break;
+            case 'gold':
+                $bonusXP = (int)($baseXP * 0.5);
+                break;
+            case 'diamond':
+                $bonusXP = (int)($baseXP * 1.0);
+                break;
+            case 'emerald':
+                $bonusXP = (int)($baseXP * 2.0);
+                break;
+        }
+
+        $finalXP = $baseXP + $bonusXP;
+
+        // --- NEW: Calculate incremental XP ---
+        $bestStmt = $pdo->prepare("SELECT MAX(score) as max_score FROM attempt_sessions WHERE user_id=? AND exercise_id=?");
+        $bestStmt->execute([$userId, $exerciseId]);
+        $prevBest = (int)($bestStmt->fetch(PDO::FETCH_ASSOC)['max_score'] ?? 0);
+
+        $incrementalXP = max(0, $finalXP - $prevBest);
+        
+        $earnedMax = ($incrementalXP === 0 && $finalXP === $prevBest);
+
+
+        // Update attempt session
+        $upd = $pdo->prepare("UPDATE attempt_sessions SET finished_at=NOW(), score=?, reward=?, elapsed_time=? WHERE id=?");
+        $upd->execute([$finalXP, $reward, $elapsedTime, $attemptId]);
+
+        // Update user points and calculate new level
+        $oldPoints = (int)$user['points'];
+        $newPoints = $oldPoints + $incrementalXP;
+
+        // Level calculation: 100 XP per level
+        $newLevel = floor($newPoints / 100) + 1;
+
+        $updUser = $pdo->prepare("UPDATE users SET points=?, level=? WHERE id=?");
+        $updUser->execute([$newPoints, $newLevel, $userId]);
+
+        $leveledUp = ($newLevel > (int)$user['level']);
+
+        $pdo->commit();
+
+        // Fetch all answers for reporting
+        $answerStmt = $pdo->prepare("SELECT correct FROM attempt_answers WHERE attempt_id=? ORDER BY id ASC");
+        $answerStmt->execute([$attemptId]);
+        $answers = array_map(fn($a) => ((int)$a['correct'] === 1), $answerStmt->fetchAll(PDO::FETCH_ASSOC));
+
+        echo json_encode([
+            'success' => true,
+            'score' => $finalXP,
+            'xp_earned' => $incrementalXP,
+            'base_xp' => $baseXP,
+            'bonus_xp' => $bonusXP,
+            'reward' => $reward,
+            'percentage' => round($percentage, 1),
+            'answers' => $answers,
+            'new_level' => $newLevel,
+            'leveled_up' => $leveledUp,
+            'maxed_out' => $earnedMax
+        ]);
         exit;
-    }
-
-    $pdo->beginTransaction();
-    $stm = $pdo->prepare("SELECT * FROM attempt_sessions WHERE id=? AND user_id=? FOR UPDATE");
-    $stm->execute([$attemptId, $userId]);
-    $attempt = $stm->fetch(PDO::FETCH_ASSOC);
-
-    if (!$attempt) {
-        $pdo->rollBack();
-        http_response_code(404);
-        echo json_encode(['error' => 'Attempt not found']);
-        exit;
-    }
-
-    // Calculate total points earned
-    $sumQ = $pdo->prepare("SELECT COALESCE(SUM(points_awarded), 0) AS total FROM attempt_answers WHERE attempt_id=?");
-    $sumQ->execute([$attemptId]);
-    $totalPoints = (int)($sumQ->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
-
-    // Update attempt session and user points
-    $upd = $pdo->prepare("UPDATE attempt_sessions SET finished_at=NOW(), score=? WHERE id=?");
-    $upd->execute([$totalPoints, $attemptId]);
-    $updUser = $pdo->prepare("UPDATE users SET points=points+? WHERE id=?");
-    $updUser->execute([$totalPoints, $userId]);
-    $pdo->commit();
-
-    // --- NEW SAFE REWARD LOGIC ---
-    $qstm = $pdo->prepare("SELECT meta FROM questions WHERE exercise_id=?");
-    $qstm->execute([$exerciseId]);
-    $allQuestions = $qstm->fetchAll(PDO::FETCH_ASSOC);
-
-    $totalPossiblePoints = 0;
-    foreach ($allQuestions as $q) {
-        $meta = $q['meta'] ? json_decode($q['meta'], true) : [];
-        $totalPossiblePoints += isset($meta['points']) ? (int)$meta['points'] : 10;
-    }
-
-    // Percentage-based reward
-    $reward = 'copper';
-    $percentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
-
-    if ($percentage >= 50) $reward = 'iron';
-    if ($percentage >= 90) $reward = 'diamond';
-
-// --- REWARD LOGIC ---
-// Percentage-based reward
-$reward = 'copper'; // default
-$percentage = ($totalPoints / $totalPossiblePoints) * 100;
-
-if ($percentage >= 50) $reward = 'iron';
-if ($percentage >= 95) $reward = 'diamond';
-
-// Timed reward: only apply if user earned diamond
-if ($reward === 'diamond') {
-//enter end time stuff when I get it to work
-    if (($endTime - $startTime) <= $timedRewardSeconds) {
-        $reward = 'emerald';
-    }
-}
-
-
-    // --- END SAFE REWARD LOGIC ---
-
-    // Fetch all answers
-    $answerStmt = $pdo->prepare("SELECT correct FROM attempt_answers WHERE attempt_id=? ORDER BY id ASC");
-    $answerStmt->execute([$attemptId]);
-    $answers = array_map(fn($a) => ((int)$a['correct'] === 1), $answerStmt->fetchAll(PDO::FETCH_ASSOC));
-
-    echo json_encode([
-        'success' => true,
-        'score' => $totalPoints,
-        'reward' => $reward,
-        'answers' => $answers
-    ]);
-    exit;
-}
-
+        }
 
         http_response_code(400);
         echo json_encode(['error' => 'Unknown action']);
         exit;
-
     } catch (Exception $ex) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         http_response_code(500);
@@ -582,6 +590,7 @@ textarea.form-control:focus {
 </style>
 </head>
 <body>
+    <div class="timer-display" id="timerDisplay" style="display:none !important;">00:00</div>
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h1 class="mb-0"><?php echo htmlspecialchars($exercise['title']); ?></h1>
@@ -616,10 +625,9 @@ textarea.form-control:focus {
 
     <!-- Score Area -->
     <div id="scoreArea" style="display: none;">
-      <h5 class="mb-3">Slutförd! 🎉</h5>
-      <div id="scoreText" class="fs-4 mb-2"></div>
-      <div id="rewardText" class="text-muted mb-3"></div>
-      <img id="rewardImg" alt="Reward">
+                        <div id="scoreResult" class="text-center"></div>
+                        <img id="rewardImg" src="" alt="" style="display:none;">
+                        <div id="levelBanner" class="level-up-banner" style="display:none;"></div>
       
       <div class="progress-wrapper">
         <div class="progress-container">
@@ -640,7 +648,6 @@ const userId = <?php echo (int)$userId; ?>;
 const exerciseId = <?php echo (int)$exerciseId; ?>;
 const questions = <?php echo json_encode($clientQuestions, JSON_UNESCAPED_UNICODE); ?>;
 
-let attemptId = null;
 let currentQuestionIndex = 0;
 let correctness = [];
 
@@ -652,7 +659,9 @@ const questionCounter = document.getElementById('questionCounter');
 const questionContent = document.getElementById('questionContent');
 const answerArea = document.getElementById('answerArea');
 const confirmBtn = document.getElementById('confirmBtn');
+            const timerDisplay = document.getElementById('timerDisplay');
 const scoreArea = document.getElementById('scoreArea');
+            const scoreResult = document.getElementById('scoreResult');
 const scoreText = document.getElementById('scoreText');
 const rewardText = document.getElementById('rewardText');
 const rewardImg = document.getElementById('rewardImg');
@@ -663,6 +672,37 @@ const markersDiv = document.getElementById('markers');
 
 const scoreProgressBar = document.getElementById('scoreProgressBar');
 const scoreMarkersDiv = document.getElementById('scoreMarkers');
+
+
+            let attemptId = 0;
+            let current = 0;
+            let answersCache = {}; // questionId -> answer payload
+            let startedAt = null;
+            let timerInterval = null;
+
+            function formatTime(sec) {
+                const m = Math.floor(sec / 60).toString().padStart(2, '0');
+                const s = (sec % 60).toString().padStart(2, '0');
+                return `${m}:${s}`;
+            }
+
+            function startTimer() {
+                startedAt = Date.now();
+                //timerDisplay.style.display = 'block';
+                timerDisplay.style.display = 'none';
+                timerInterval = setInterval(() => {
+                    const diff = Math.floor((Date.now() - startedAt) / 1000);
+                    timerDisplay.textContent = formatTime(diff);
+                }, 1000);
+            }
+
+            function stopTimer() {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+
+
+
 
 function updateProgress(showTorch = true, bar = progressBar, markerDiv = markersDiv, torchElement = progressMarker) {
     const percent = (correctness.length / questions.length) * 100;
@@ -723,6 +763,7 @@ async function startAttempt() {
         passageArea.style.display = 'none';
         questionArea.style.display = 'block';
         renderQuestion();
+        startTimer();
     } catch (error) {
         console.error('Error starting attempt:', error);
         alert('Ett fel uppstod. Försök igen.');
@@ -826,26 +867,106 @@ async function confirmAnswer() {
     }
 }
 
-async function finishAttempt() {
+    async function finishAttempt() {
+    if (!attemptId) return alert('Inget aktivt försök.');
+    stopTimer();
+    const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+    
     try {
-        const result = await apiCall('finish_attempt', {
-            attempt_id: attemptId
+        const res = await fetch(`?exercise_id=${exerciseId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action: 'finish_attempt',
+                attempt_id: attemptId,
+                elapsed_time: elapsed
+            })
         });
+        
+        const json = await res.json();
+        
+        if (json.success) {
+            // Update correctness array
+            correctness = json.answers || correctness;
+            
+            // Hide question area, show score area
+            document.getElementById('questionArea').style.display = 'none';
+            scoreArea.style.display = 'block';
 
-        correctness = result.answers || correctness;
-        questionArea.style.display = 'none';
-        scoreArea.style.display = 'block';
-        
-        scoreText.textContent = `Du fick ${result.score} poäng!`;
-        rewardText.textContent = `Belöning: ${result.reward.replace('_', ' ')}`;
-        rewardImg.src = `../assets/img/${result.reward}.png`;
-        
-        updateProgress(false, scoreProgressBar, scoreMarkersDiv, null);
-    } catch (error) {
-        console.error('Error finishing attempt:', error);
-        alert('Ett fel uppstod. Försök igen.');
+
+            // Show final progress bar in score area
+            const finalScoreProgressBar = document.getElementById('scoreProgressBar');
+            const finalScoreMarkersDiv = document.getElementById('scoreMarkers');
+            
+            if (finalScoreProgressBar && finalScoreMarkersDiv) {
+                // Show progress at 90% first
+                updateProgress(false, finalScoreProgressBar, finalScoreMarkersDiv, null);
+                
+                // Then animate final sprint to 100%
+                setTimeout(() => {
+                    finalScoreProgressBar.style.width = '100%';
+                }, 100);
+            }
+            // Determine XP message
+            if (json.xp_earned > 0) {
+                // Normal case: XP earned
+                scoreResult.innerHTML = `
+                    <h3>Du fick ${json.xp_earned} XP</h3>
+                    <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
+                    <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                `;
+                rewardImg.src = '../assets/img/' + json.reward + '.png';
+                rewardImg.style.display = 'block';
+            } else {
+                // XP earned = 0
+                if (json.maxed_out) {
+                    // Already reached max XP for this exercise
+                    scoreResult.innerHTML = `
+                        <h3>Du tjänade 0 XP!</h3>
+                        <h4>Du har redan tjänat allt du kan från denna uppgift.</h4>
+                        <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
+                        <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                    `;
+                } else {
+                    // Actually failed this attempt
+                    scoreResult.innerHTML = `
+                        <h3>Tyvärr, du fick 0 XP denna gång</h3>
+                        <h4>Försök igen för att tjäna XP.</h4>
+                        <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                    `;
+                }
+                rewardImg.style.display = 'none';
+            }
+
+            // Level up banner
+            if (json.leveled_up) {
+                if (typeof soundManager !== 'undefined') {
+                    soundManager.play('levelup');
+                }
+                levelBanner.style.display = 'block';
+                levelBanner.textContent = `Grattis! Du gick upp till nivå ${json.new_level}`;
+            } else {
+                levelBanner.style.display = 'none';
+            }
+
+            // Show final progress bar in score area
+            const scoreProgressBar = document.getElementById('scoreProgressBar');
+            const scoreMarkersDiv = document.getElementById('scoreMarkers');
+            if (scoreProgressBar && scoreMarkersDiv) {
+                updateProgress(false, scoreProgressBar, scoreMarkersDiv, null);
+            }
+            
+        } else {
+            alert('Misslyckades avsluta försök: ' + (json.error || 'okänt'));
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Serverfel vid avslut');
     }
 }
+
 
 startBtn.addEventListener('click', startAttempt);
 confirmBtn.addEventListener('click', confirmAnswer);
