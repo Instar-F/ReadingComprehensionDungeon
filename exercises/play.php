@@ -612,39 +612,44 @@ textarea.form-control:focus {
 </style>
 </head>
 <body>
-    <div class="timer-display" id="timerDisplay" style="display:none !important;">00:00</div>
+    
+<div class="timer-display" id="timerDisplay" style="display:none !important;">00:00</div>
+
 <div class="container py-4">
+  <!-- Header -->
   <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <h1 class="mb-0"><?php echo htmlspecialchars($exercise['title']); ?></h1>
     <a href="../exercises/entrance.php" class="btn btn-outline-light">← Tillbaka</a>
   </div>
 
-  <div id="stage" class="card p-4">
+    <div id="stage" class="card p-4">
 
     <!-- Passage Area -->
-    <div id="passageArea">
-      <h5 class="mb-3">Läs texten</h5>
-      <div id="passageContent"><?php echo htmlspecialchars($passage['content'] ?? ''); ?></div>
-      <button id="startBtn" class="btn btn-warning mt-3 w-100">Gå vidare till frågor →</button>
-                          <div class="requirements-box mt-2 order-*">
-                        <div class="mb-2"><strong>Din bästa prestation:</strong></div>
-                        <?php if ($bestAttempt): ?>
-                            <div>Belöning: <?php echo htmlspecialchars($bestAttempt['reward']); ?></div>
-                            <div>Poäng: <?php echo (int)$bestAttempt['score']; ?></div>
-                            <div>Tid: <?php echo htmlspecialchars($bestAttempt['elapsed_time']); ?>s</div>
-                        <?php else: ?>
-                            <div>Inga tidigare försök</div>
-                        <?php endif; ?>
-                    </div>
-    </div>
+        <div id="passageArea">
+        <h5 class="mb-3">Läs texten</h5>
+        <div id="passageContent"><?php echo htmlspecialchars($passage['content'] ?? ''); ?></div>
+        <button id="startBtn" class="btn btn-warning mt-3 w-100">Gå vidare till frågor →</button>
+            <div class="requirements-box mt-2 order-*">
+             <div class="mb-2"><strong>Din bästa prestation:</strong></div>
+                <?php if ($bestAttempt): ?>
+                <div>Belöning: <?php echo htmlspecialchars($bestAttempt['reward']); ?></div>
+                    <div>Poäng: <?php echo (int)$bestAttempt['score']; ?></div>
+                    <div>Tid: <?php echo htmlspecialchars($bestAttempt['elapsed_time']); ?>s</div>
+                <?php else: ?>
+                    <div>Inga tidigare försök</div>
+                <?php endif; ?>
+            </div>
+            </div>
 
     <!-- Question Area -->
-    <div id="questionArea" style="display: none;">
+    <div id="questionArea" style="display:none;">
       <div id="questionCounter" class="mb-3 text-muted small"></div>
       <div id="questionContent" class="mb-4"></div>
       <div id="answerArea" class="mb-4"></div>
-      <button id="confirmBtn" class="btn btn-primary w-100">Bekräfta svar →</button>
 
+      <button id="confirmBtn" class="btn btn-primary w-100 mb-4">Bekräfta svar →</button>
+
+      <!-- Progress Bar -->
       <div class="progress-wrapper">
         <div class="progress-container">
           <div id="progressBar" class="progress-bar-custom"></div>
@@ -656,20 +661,25 @@ textarea.form-control:focus {
     </div>
 
     <!-- Score Area -->
-    <div id="scoreArea" style="display: none;">
-                        <div id="scoreResult" class="text-center"></div>
-                        <img id="rewardImg" src="" alt="" style="display:none;">
-                        <div id="levelBanner" class="level-up-banner" style="display:none;"></div>
-      
-      <div class="progress-wrapper">
+    <div id="scoreArea" style="display:none;">
+      <div id="scoreResult" class="text-center"></div>
+      <img id="rewardImg" src="" alt="" style="display:none;">
+      <div id="levelBanner" class="level-up-banner" style="display:none;"></div>
+
+      <!-- End Progress Bar -->
+      <div class="progress-wrapper mt-3">
         <div class="progress-container">
           <div id="scoreProgressBar" class="progress-bar-custom"></div>
           <div id="scoreMarkers" class="markers"></div>
           <img class="chest" src="../assets/img/chest.png" alt="Goal">
         </div>
       </div>
-      
-      <a href="../exercises/entrance.php" class="btn btn-primary mt-4 w-100">Tillbaka till uppdrag</a>
+
+      <!-- Action Buttons -->
+      <div class="d-flex flex-column align-items-center gap-2 mt-4">
+        <button id="retryBtn" class="btn btn-secondary w-100">Försök igen</button>
+        <a href="../exercises/entrance.php" class="btn btn-primary w-100">Tillbaka till uppdrag</a>
+      </div>
     </div>
 
   </div>
@@ -691,19 +701,18 @@ const questionCounter = document.getElementById('questionCounter');
 const questionContent = document.getElementById('questionContent');
 const answerArea = document.getElementById('answerArea');
 const confirmBtn = document.getElementById('confirmBtn');
-            const timerDisplay = document.getElementById('timerDisplay');
+const timerDisplay = document.getElementById('timerDisplay');
 const scoreArea = document.getElementById('scoreArea');
-            const scoreResult = document.getElementById('scoreResult');
+const scoreResult = document.getElementById('scoreResult');
 const scoreText = document.getElementById('scoreText');
 const rewardText = document.getElementById('rewardText');
 const rewardImg = document.getElementById('rewardImg');
-
 const progressBar = document.getElementById('progressBar');
 const progressMarker = document.getElementById('progressMarker');
 const markersDiv = document.getElementById('markers');
-
 const scoreProgressBar = document.getElementById('scoreProgressBar');
 const scoreMarkersDiv = document.getElementById('scoreMarkers');
+const retryBtn = document.getElementById('retryBtn');
 
 
             let attemptId = 0;
@@ -1005,6 +1014,9 @@ async function confirmAnswer() {
 
 startBtn.addEventListener('click', startAttempt);
 confirmBtn.addEventListener('click', confirmAnswer);
+retryBtn.addEventListener('click', () => {
+    window.location.reload();
+});
 
 window.addEventListener('resize', () => {
     if (progressMarker.style.display !== 'none') {
