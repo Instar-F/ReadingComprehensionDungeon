@@ -5,10 +5,7 @@ if (!is_logged_in()) {
 }
 $user = current_user($pdo);
 
-// Fetch recent attempts
-$stmt = $pdo->prepare('SELECT a.*, q.content AS question FROM attempts a LEFT JOIN questions q ON q.id = a.question_id WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 10');
-$stmt->execute([$user['id']]);
-$attempts = $stmt->fetchAll();
+
 
 ?>
 <!doctype html>
@@ -19,7 +16,7 @@ $attempts = $stmt->fetchAll();
   <title>Dashboard - Lärportal</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/laro-style.css">
+  <link rel="stylesheet" href="assets/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="dungeon-bg">
