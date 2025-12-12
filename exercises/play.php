@@ -330,6 +330,15 @@ foreach ($questions as $q) {
         'choices' => $clientChoices
     ];
 }
+$bestStmt = $pdo->prepare("
+    SELECT reward, score, elapsed_time 
+    FROM attempt_sessions 
+    WHERE user_id=? AND exercise_id=? AND finished_at IS NOT NULL 
+    ORDER BY score DESC, elapsed_time ASC 
+    LIMIT 1
+");
+$bestStmt->execute([$userId, $exerciseId]);
+$bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 ?>
 <!doctype html>
 <html lang="sv">
@@ -604,6 +613,16 @@ textarea.form-control:focus {
       <h5 class="mb-3">Läs texten</h5>
       <div id="passageContent"><?php echo htmlspecialchars($passage['content'] ?? ''); ?></div>
       <button id="startBtn" class="btn btn-warning mt-3 w-100">Gå vidare till frågor →</button>
+                          <div class="requirements-box mt-2 order-*">
+                        <div class="mb-2"><strong>Din bästa prestation:</strong></div>
+                        <?php if ($bestAttempt): ?>
+                            <div>Belöning: <?php echo htmlspecialchars($bestAttempt['reward']); ?></div>
+                            <div>Poäng: <?php echo (int)$bestAttempt['score']; ?></div>
+                            <div>Tid: <?php echo htmlspecialchars($bestAttempt['elapsed_time']); ?>s</div>
+                        <?php else: ?>
+                            <div>Inga tidigare försök</div>
+                        <?php endif; ?>
+                    </div>
     </div>
 
     <!-- Question Area -->
