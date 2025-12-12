@@ -28,8 +28,8 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
     if (json_last_error() !== JSON_ERROR_NONE) {
         http_response_code(400);
         echo json_encode(['error' => 'Invalid JSON']);
-        exit;
-    }
+            exit;
+        }
 
     $action = $data['action'] ?? '';
 
@@ -65,6 +65,163 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
 
             $meta = $question['meta'] ? json_decode($question['meta'], true) : [];
             $pointsForQuestion = isset($meta['points']) ? (int)$meta['points'] : 10;
+
+
+            // Enhanced ordering scoring helper
+            
+            $computeOrderingScore = function(array $userOrder, array $correctOrder, array $weights, array $options) {
+                $totalItems = count($correctOrder);
+                $result = [
+                    'order_accuracy' => 0.0,           // 1 - inversions/max_inversions
+                    'inversions' => 0,
+                    'max_inversions' => 0,
+                    'offs_sum' => 0,                   // sum of absolute position differences
+                    'offs_norm' => 0.0,                // normalized offs sum in [0,1]
+                    'present_ratio' => 0.0,            // presentCount/totalItems
+                    'final_ratio' => 0.0,
+                    'exact_position_ids' => []
+                ];
+                if ($totalItems === 0) return $result;
+
+                // Normalize user order: keep only unique IDs that exist in correctOrder, preserve first occurrence
+                $setCorrect = array_flip($correctOrder); // id => pos
+                $normalized = [];
+                $seen = [];
+                foreach ($userOrder as $id) {
+                    $id = (int)$id;
+                    if (isset($setCorrect[$id]) && !isset($seen[$id])) {
+                        $normalized[] = $id;
+                        $seen[$id] = true;
+                    }
+                }
+                $presentCount = count($normalized);
+                $result['present_ratio'] = $totalItems > 0 ? ($presentCount / $totalItems) : 0.0;
+
+                // If empty after normalization, return zeros
+                if ($presentCount === 0) {
+                    return $result;
+                }
+
+                // Perfect override: if user order exactly equals correct order and lengths match
+                if ($presentCount === $totalItems) {
+                    $isExact = true;
+                    for ($i = 0; $i < $totalItems; $i++) {
+                        if ((int)$userOrder[$i] !== (int)$correctOrder[$i]) { $isExact = false; break; }
+                    }
+                    if ($isExact) {
+                        $result['order_accuracy'] = 1.0;
+                        $result['inversions'] = 0;
+                        $result['max_inversions'] = max(0, intdiv($totalItems * ($totalItems - 1), 2));
+                        $result['offs_sum'] = 0;
+                        $result['offs_norm'] = 0.0;
+                        $result['final_ratio'] = 1.0;
+                        $result['exact_position_ids'] = $correctOrder;
+                        return $result;
+                    }
+                }
+
+                
+                // Inversion count on the present sequence relative to correct positions
+                $presentPos = array_map(function($id) use ($setCorrect) { return $setCorrect[$id]; }, $normalized);
+                $n = count($presentPos);
+                $maxInv = max(0, intdiv($n * ($n - 1), 2));
+                $inv = 0;
+                for ($i = 0; $i < $n; $i++) {
+                    for ($j = $i + 1; $j < $n; $j++) {
+                        if ($presentPos[$i] > $presentPos[$j]) $inv++;
+                    }
+                }
+
+                // Offs sum: build a full sequence by appending any missing items to the end for displacement calc
+                $normalizedFull = $normalized;
+                foreach ($correctOrder as $id) {
+                    if (!isset($seen[$id])) $normalizedFull[] = $id;
+                }
+                $sumDisp = 0;
+                $maxDisp = 0;
+                foreach ($normalizedFull as $i => $id) {
+                    $correctPos = $setCorrect[$id];
+                    $sumDisp += abs($i - $correctPos);
+                    $maxDisp += max($i, $totalItems - 1 - $i);
+                }
+                $offsNorm = $maxDisp > 0 ? ($sumDisp / $maxDisp) : 0.0;
+
+                // Exact position ids for feedback
+                $exactIds = [];
+                $limit = min($totalItems, count($normalizedFull));
+                for ($i = 0; $i < $limit; $i++) {
+                    if ($correctOrder[$i] === $normalizedFull[$i]) $exactIds[] = (int)$normalizedFull[$i];
+                }
+
+                // Build per-item offs list based on normalizedFull
+                $perItems = [];
+                $limit = min($totalItems, count($normalizedFull));
+                for ($i = 0; $i < $limit; $i++) {
+                    $id = (int)$normalizedFull[$i];
+                    $correctPos = (int)$setCorrect[$id];
+                    $perItems[] = [
+                        'id' => $id,
+                        'current_pos' => $i,
+                        'correct_pos' => $correctPos,
+                        'offs' => abs($i - $correctPos)
+                    ];
+                }
+
+
+                // Options and defaults for blended scoring and softening
+                $nearT = (int)($options['near_threshold'] ?? 1);
+                $farT  = (int)($options['far_threshold'] ?? 2);
+                $softFactor = (float)($options['near_soft_factor'] ?? 0.5); // reduce penalty when exactly one far-off item
+                $wInv = (float)($options['weight_inversion'] ?? 0.7);
+                $wOffs = (float)($options['weight_offs'] ?? 0.3);
+                $alpha = (float)($options['accuracy_alpha'] ?? 0.9);
+                // Clamp sensible ranges
+                $softFactor = max(0.0, min(1.0, $softFactor));
+                $wInv = max(0.0, min(1.0, $wInv));
+                $wOffs = max(0.0, min(1.0, $wOffs));
+                if (($wInv + $wOffs) > 0) {
+                    // normalize to sum 1
+                    $sumW = $wInv + $wOffs;
+                    $wInv /= $sumW;
+                    $wOffs /= $sumW;
+                } else {
+                    $wInv = 1.0; $wOffs = 0.0;
+                }
+                $alpha = max(0.5, min(2.0, $alpha));
+
+                // Near-perfect softening: if exactly one far-off item and others near or exact
+                $farCount = 0; $nearOrExactCount = 0;
+                foreach ($perItems as $pi) {
+                    if ($pi['offs'] >= $farT) $farCount++;
+                    elseif ($pi['offs'] <= $nearT) $nearOrExactCount++;
+                }
+                $invEff = $inv;
+                if ($farCount === 1 && ($nearOrExactCount >= ($totalItems - 1))) {
+                    $invEff = (int)round($inv * $softFactor);
+                }
+
+                // Order accuracy from effective inversions
+                $orderAcc = ($maxInv > 0) ? (1.0 - ($invEff / $maxInv)) : 1.0; // if n<2, treat as fully ordered
+
+                // Blended base using inversions and offs
+                $base = ($wInv * $orderAcc) + ($wOffs * (1.0 - $offsNorm));
+                // Presence scaling
+                $base *= $result['present_ratio'];
+                // Gentle non-linear mapping
+                $final = max(0.0, min(1.0, pow(max(0.0, min(1.0, $base)), $alpha)));
+
+                $result['order_accuracy'] = $orderAcc;
+                $result['inversions'] = $invEff;
+                $result['max_inversions'] = $maxInv;
+                $result['offs_sum'] = $sumDisp;
+                $result['offs_norm'] = $offsNorm;
+                $result['final_ratio'] = $final;
+                $result['exact_position_ids'] = $exactIds;
+
+                $result['per_item'] = $perItems;
+
+                return $result;
+            };
 
             $isCorrect = 0;
             $awardedPoints = 0;
@@ -108,48 +265,56 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                     $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
-                    case 'ordering':
-                        $order = $userAnswer['order'] ?? [];
-                                        
-                        // Get correct order from ordering_items table
-                        $orderStmt = $pdo->prepare("SELECT id FROM ordering_items WHERE question_id=? ORDER BY correct_pos ASC");
-                        $orderStmt->execute([$questionId]);
-                        $correctOrder = array_column($orderStmt->fetchAll(PDO::FETCH_ASSOC), 'id');
-                                        
-                        $totalItems = count($correctOrder);
-                                        
-                        if ($totalItems > 0) {
-                            // Count correct sequential pairs (items that appear in correct relative order)
-                            $correctPairs = 0;
-                            $totalPairs = max(0, $totalItems - 1);
-                                            
-                            for ($i = 0; $i < count($order) - 1; $i++) {
-                                $currentId = (int)$order[$i];
-                                $nextId = (int)$order[$i + 1];
-                                                
-                                // Check if this pair appears in the same order in correct sequence
-                                $currentPos = array_search($currentId, $correctOrder);
-                                $nextPos = array_search($nextId, $correctOrder);
-                                                
-                                if ($currentPos !== false && $nextPos !== false && $nextPos === $currentPos + 1) {
-                                    $correctPairs++;
-                                }
-                            }
-                                            
-                            // Award points based on correct sequential pairs
-                            if ($totalPairs > 0) {
-                                $percentageCorrect = $correctPairs / $totalPairs;
-                                $awardedPoints = (int)($pointsForQuestion * $percentageCorrect);
-                            } else {
-                                $awardedPoints = 0;
-                            }
-                                            
-                            $isCorrect = ($order === $correctOrder) ? 1 : 0;
-                        } else {
-                            $awardedPoints = 0;
-                            $isCorrect = 0;
+                    
+                case 'ordering':
+                    $order = $userAnswer['order'] ?? [];
+
+                    // Get correct order from ordering_items table
+                    $orderStmt = $pdo->prepare("SELECT id FROM ordering_items WHERE question_id=? ORDER BY correct_pos ASC");
+                    $orderStmt->execute([$questionId]);
+                    $correctOrder = array_column($orderStmt->fetchAll(PDO::FETCH_ASSOC), 'id');
+
+                    $totalItems = count($correctOrder);
+
+                    if ($totalItems > 0) {
+                        // Read optional per-question weights/options from meta
+                        $weights = [];
+                        $options = [];
+                        if (isset($meta['ordering_scoring_weights']) && is_array($meta['ordering_scoring_weights'])) {
+                            $weights = $meta['ordering_scoring_weights'];
                         }
-                        break;
+                        if (isset($meta['ordering_scoring_options']) && is_array($meta['ordering_scoring_options'])) {
+                            $options = $meta['ordering_scoring_options'];
+                        }
+
+                        // Compute enhanced scoring breakdown
+                        $breakdown = $computeOrderingScore($order, $correctOrder, $weights, $options);
+                        $finalRatio = (float)$breakdown['final_ratio'];
+                        $awardedPoints = (int)round($pointsForQuestion * $finalRatio);
+                        $isCorrect = ($finalRatio >= 0.999 && $order === $correctOrder) ? 1 : 0;
+
+                        // If exact order, override points to full and mark as correct
+                        $isExactOrder = (count($order) === count($correctOrder)) && ($order === $correctOrder);
+                        if ($isExactOrder) {
+                            $awardedPoints = (int)$pointsForQuestion;
+                            $isCorrect = 1;
+                        }
+
+                    } else {
+                        $awardedPoints = 0;
+                        $isCorrect = 0;
+                        $breakdown = [
+                            'exact_positions_ratio' => 0,
+                            'relative_order_ratio' => 0,
+                            'adjacent_pairs_ratio' => 0,
+                            'displacement_norm' => 1,
+                            'missing_ratio' => 1,
+                            'final_ratio' => 0,
+                            'exact_position_ids' => []
+                        ];
+                    }
+                    break;
+
 
 
                 case 'matching':
@@ -200,7 +365,8 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 'correct' => $isCorrect,
                 'points_awarded' => $awardedPoints,
                 'answer_id' => $answerId,
-                'answers' => $answers
+                'answers' => $answers,
+                'breakdown' => isset($breakdown) ? $breakdown : null
             ]);
             exit;
         }
@@ -261,13 +427,17 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             // Calculate percentage based on correct vs total questions
             $percentage = ($totalQuestions > 0) ? ($correctCount / $totalQuestions) * 100 : 0;
             $EXPpercentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
+            // Optional: base reward tiers on EXPpercentage instead of correct-count percentage
+            $metadata = json_decode($exercise['metadata'] ?? '{}', true);
+            $useExpPercentage = isset($metadata['use_exp_percentage']) ? (bool)$metadata['use_exp_percentage'] : false;
+            $usedPercentage = $useExpPercentage ? $EXPpercentage : $percentage;
 
             // Determine reward based on percentage
             $reward = 'coal';
-            if ($percentage >= 70) $reward = 'copper';
-            if ($percentage >= 80) $reward = 'iron';
-            if ($percentage >= 90) $reward = 'gold';
-            if ($percentage >= 100) $reward = 'diamond';
+            if ($usedPercentage >= 70) $reward = 'copper';
+            if ($usedPercentage >= 80) $reward = 'iron';
+            if ($usedPercentage >= 90) $reward = 'gold';
+            if ($usedPercentage >= 100) $reward = 'diamond';
 
             $metadata = json_decode($exercise['metadata'] ?? '{}', true);
             $emeraldSeconds = isset($metadata['time_limit']) ? (int)$metadata['time_limit'] : 60;
@@ -339,8 +509,9 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 'base_xp' => $baseXP,
                 'bonus_xp' => $bonusXP,
                 'reward' => $reward,
-                'percentage' => round($percentage, 1),
+                'percentage' => round($usedPercentage, 1),
                 'EXPpercentage' => round($EXPpercentage, 1),
+                'percentage_type' => $useExpPercentage ? 'exp' : 'correct',
                 'answers' => $answers,
                 'new_level' => $newLevel,
                 'leveled_up' => $leveledUp,
@@ -625,6 +796,31 @@ textarea.form-control:focus {
     transform: scale(0.95);
 }
 
+/* Exact position highlight */
+.ordering-item.correct-pos {
+    border-color: #28a745 !important;
+    background: rgba(40, 167, 69, 0.15) !important;
+}
+
+/* Near/Far hints */
+.ordering-item.near-pos {
+    border-color: #ffc107 !important;
+    background: rgba(255, 193, 7, 0.15) !important;
+}
+.ordering-item.far-pos {
+    border-color: #dc3545 !important;
+    background: rgba(220, 53, 69, 0.15) !important;
+}
+.ordering-hint-badge {
+    float: right;
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+
 #scoreArea {
     text-align: center;
 }
@@ -737,7 +933,7 @@ textarea.form-control:focus {
 
     <!-- Question Area -->
     <div id="questionArea" style="display:none;">
-      <div id="questionCounter" class="mb-3 text-muted small"></div>
+      <div id="questionCounter" class="mb-3 small"></div>
       <div id="questionContent" class="mb-4"></div>
       <div id="answerArea" class="mb-4"></div>
 
@@ -810,6 +1006,8 @@ const levelBanner = document.getElementById('levelBanner');
 let attemptId = 0;
 let startedAt = null;
 let timerInterval = null;
+
+let waitingToAdvance = false; // for ordering: stay on results until next press
 
 function formatTime(sec) {
     const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -898,6 +1096,75 @@ async function startAttempt() {
     }
 }
 
+
+function showOrderingFeedback(breakdown, question) {
+    const list = document.getElementById('orderingList');
+    if (!list || !breakdown) return;
+
+    // Compute correct order from meta items (items are provided in correct_pos order)
+    const correctOrderIds = (question.meta.items || []).map(it => parseInt(it.id, 10));
+    const children = Array.from(list.children);
+
+    // Mark items that are currently in their exact correct slots
+
+    const showHints = (question.meta && (question.meta.show_item_hints !== false));
+    const perItem = Array.isArray(breakdown.per_item) ? breakdown.per_item : [];
+
+    // Reset classes and badges
+    children.forEach(el => {
+        el.classList.remove('correct-pos','near-pos','far-pos');
+        const oldBadge = el.querySelector('.ordering-hint-badge');
+        if (oldBadge) oldBadge.remove();
+    });
+
+    // Apply statuses
+    children.forEach((el, idx) => {
+        const id = parseInt(el.dataset.id, 10);
+        const detail = perItem.find(p => p.id === id);
+        const offs = detail ? (detail.offs || 0) : (correctOrderIds[idx] === id ? 0 : 999);
+        const correctPos = detail ? detail.correct_pos : null;
+        if (correctOrderIds[idx] === id) {
+            el.classList.add('correct-pos');
+        } else if (offs === 1) {
+            el.classList.add('near-pos');
+        } else if (offs >= 2) {
+            el.classList.add('far-pos');
+        }
+        if (showHints && Number.isInteger(offs) && correctPos !== null) {
+            const badge = document.createElement('span');
+            badge.className = 'ordering-hint-badge';
+            badge.textContent = `offs:${offs} → ${correctPos+1}`; // show 1-based target
+            el.appendChild(badge);
+        }
+    });
+
+    children.forEach((el, idx) => {
+        const id = parseInt(el.dataset.id, 10);
+        if (correctOrderIds[idx] === id) {
+            el.classList.add('correct-pos');
+        } else {
+            el.classList.remove('correct-pos');
+        }
+    });
+
+    // Show a small breakdown panel
+    let panel = document.getElementById('orderingFeedback');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'orderingFeedback';
+        panel.className = 'mt-3';
+        answerArea.appendChild(panel);
+    }
+    const pct = v => Math.round((v || 0) * 100);
+    panel.innerHTML = `
+        <div class="small">
+            <strong>Poängberäkning:</strong>
+            <div>Ordningens noggrannhet: ${pct(breakdown.order_accuracy)}%</div>
+            <div>Inversioner: ${breakdown.inversions} / ${breakdown.max_inversions}</div>
+            <div>Offs (normaliserat): ${pct(breakdown.offs_norm)}%</div>
+        </div>
+    `;
+}
 function renderQuestion() {
     const question = questions[currentQuestionIndex];
     questionCounter.textContent = `Fråga ${currentQuestionIndex + 1} av ${questions.length}`;
@@ -981,39 +1248,42 @@ function selectChoice(button) {
     button.classList.add('active');
 }
 
+
 async function confirmAnswer() {
     const question = questions[currentQuestionIndex];
+    if (waitingToAdvance) {
+        // Advance to next question now
+        waitingToAdvance = false;
+        confirmBtn.textContent = 'Bekräfta svar →';
+        currentQuestionIndex++;
+        if (currentQuestionIndex < questions.length) {
+            renderQuestion();
+            confirmBtn.disabled = false;
+        } else {
+            await finishAttempt();
+        }
+        return;
+    }
+
     let answerObj = null;
 
     if (question.type === 'mcq') {
         const selected = answerArea.querySelector('button.active');
-        if (!selected) {
-            alert('Välj ett svar först');
-            return;
-        }
+        if (!selected) { alert('Välj ett svar först'); return; }
         answerObj = { choice_id: parseInt(selected.dataset.choiceId, 10) };
     } else if (question.type === 'truefalse') {
         const selected = answerArea.querySelector('button.active');
-        if (!selected) {
-            alert('Välj ett svar först');
-            return;
-        }
+        if (!selected) { alert('Välj ett svar först'); return; }
         answerObj = { choice_id: selected.dataset.choiceId };
     } else if (question.type === 'ordering') {
         const list = document.getElementById('orderingList');
-        if (!list) {
-            alert('Ordna elementen först');
-            return;
-        }
+        if (!list) { alert('Ordna elementen först'); return; }
         const order = Array.from(list.children).map(el => parseInt(el.dataset.id, 10));
-        answerObj = { order: order };
+        answerObj = { order };
     } else {
         const textarea = answerArea.querySelector('textarea');
-        answerObj = { text: textarea.value.trim() };
-        if (!answerObj.text) {
-            alert('Skriv ett svar först');
-            return;
-        }
+        answerObj = { text: (textarea.value || '').trim() };
+        if (!answerObj.text) { alert('Skriv ett svar först'); return; }
     }
 
     try {
@@ -1025,17 +1295,31 @@ async function confirmAnswer() {
         });
 
         correctness = result.answers || correctness;
-        currentQuestionIndex++;
 
+        if (question.type === 'ordering' && result.breakdown) {
+            try {
+                showOrderingFeedback(result.breakdown, question);
+                // Keep results displayed until next press
+                waitingToAdvance = true;
+                confirmBtn.textContent = 'Resultat → Nästa';
+                confirmBtn.disabled = false;
+                return;
+            } catch (e) {
+                console.warn('Ordering feedback error', e);
+            }
+        }
+
+        // Non-ordering or no breakdown: proceed as before
+        currentQuestionIndex++;
         if (currentQuestionIndex < questions.length) {
             renderQuestion();
+            confirmBtn.disabled = false;
         } else {
             await finishAttempt();
         }
     } catch (error) {
         console.error('Error submitting answer:', error);
         alert('Ett fel uppstod. Försök igen.');
-    } finally {
         confirmBtn.disabled = false;
     }
 }
@@ -1079,7 +1363,7 @@ async function finishAttempt() {
                 scoreResult.innerHTML = `
                     <h3>Du fick ${json.xp_earned} XP</h3>
                     <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
-                    <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                    <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
                     <div>% av EXP: ${json.EXPpercentage}%</div>
                 `;
                 rewardImg.src = '../assets/img/' + json.reward + '.png';
@@ -1090,14 +1374,14 @@ async function finishAttempt() {
                         <h3>Du tjänade 0 XP!</h3>
                         <h4>Du har redan tjänat allt du kan från denna uppgift.</h4>
                         <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
-                        <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                        <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
                         <div>% av EXP: ${json.EXPpercentage}%</div>
                     `;
                 } else {
                     scoreResult.innerHTML = `
                         <h3>Tyvärr, du fick 0 XP denna gång</h3>
                         <h4>Försök igen för att tjäna XP.</h4>
-                        <div>Belöning: ${json.reward} – ${json.percentage}%</div>
+                        <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
                         <div>% av EXP: ${json.EXPpercentage}%</div>
                     `;
                 }
