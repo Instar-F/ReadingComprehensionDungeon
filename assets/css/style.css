@@ -1,6 +1,429 @@
-body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
-.card { box-shadow: 0 1px 2px rgba(0,0,0,0.03); }
-.display-6 { font-size: 2.2rem; }
+body { 
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; 
+}
+
+.card { 
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03); 
+}
+
+.display-6 { 
+    font-size: 2.2rem; 
+}
 
 /* Accessibility: larger buttons for target group */
-.btn { padding: .6rem .9rem; }
+.btn { 
+    padding: .6rem .9rem; 
+}
+
+/* Progress Bar System */
+.progress-wrapper {
+    position: relative;
+    margin-top: 1.5rem;
+    padding: 0 20px;
+}
+
+.progress-container {
+    background: #333;
+    height: 28px;
+    border-radius: 14px;
+    position: relative;
+    overflow: visible;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+    margin: 0 40px;
+}
+
+.progress-bar-custom {
+    background: linear-gradient(90deg, #ffc107 0%, #ffb300 100%);
+    height: 100%;
+    border-radius: 14px;
+    transition: width 0.5s ease;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
+}
+
+.markers {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    width: 100%;
+    height: 16px;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.marker {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    transform: translateX(-50%);
+}
+
+.torch {
+    position: absolute;
+    top: -12px;
+    width: 48px;
+    height: 48px;
+    transition: left 0.5s ease;
+    pointer-events: none;
+    z-index: 3;
+    filter: drop-shadow(0 2px 8px rgba(255, 193, 7, 0.6));
+}
+
+/* Mine entrance icon on the left */
+.mine_entrance {
+    position: absolute;
+    left: -48px;
+    top: -8px;
+    width: 40px !important;
+    height: 40px !important;
+    z-index: 3;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+/* Chest icon on the right */
+.chest {
+    position: absolute;
+    right: -48px;
+    top: -8px;
+    width: 40px;
+    height: 40px;
+    z-index: 3;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+@media (max-width: 768px) {
+    .progress-container {
+        margin: 0 36px;
+    }
+    
+    .torch {
+        width: 36px;
+        height: 36px;
+        top: -8px;
+    }
+    
+    .mine_entrance,
+    .chest {
+        width: 32px;
+        height: 32px;
+        top: -6px;
+    }
+    
+    .mine_entrance {
+        left: -40px;
+    }
+    
+    .chest {
+        right: -40px;
+    }
+    
+    .marker {
+        width: 14px;
+        height: 14px;
+    }
+}
+
+@media (max-width: 576px) {
+    .progress-container {
+        margin: 0 32px;
+        height: 20px;
+    }
+    
+    .torch {
+        width: 28px;
+        height: 28px;
+        top: -6px;
+    }
+    
+    .mine_entrance {
+        left: -36px;
+        width: 28px;
+        height: 28px;
+        top: -4px;
+    }
+    
+    .chest {
+        right: -36px;
+        width: 28px;
+        height: 28px;
+        top: -4px;
+    }
+    
+    .marker {
+        width: 12px;
+        height: 12px;
+    }
+    
+    .markers {
+        top: 4px;
+    }
+}
+
+/* Additional debugging - remove after testing */
+/* Uncomment these to see if the element is there:
+.mine_entrance {
+    border: 2px solid red !important;
+    background: yellow !important;
+}
+*/
+
+/* Existing CSS */
+body { 
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; 
+    background: #0f1724; /* from new style */
+    color: #e6eef8;      /* from new style */
+    min-height: 100vh;    /* from new style */
+}
+.card { 
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03); 
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    color: white;
+    border-radius: 12px;
+}
+.display-6 { font-size: 2.2rem; }
+
+
+.req-icon {
+    width: 50px; height: auto; margin-right: 6px; vertical-align: middle;
+}
+.req-item {
+margin-right: 10px; justify-content: left; align-items: center; display: inline-flex;
+}
+.req-item-emerald {
+    justify-content: center; align-items: center; display: inline-flex;
+}
+/* Accessibility: larger buttons for target group */
+.btn { padding: .6rem .9rem; transition: all 0.2s; }
+.btn-light { transition: all 0.2s; }
+.btn-light:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); }
+.btn-light.active { background: #ffc107; color: #000; border-color: #ffc107; }
+
+/* Background using provided artwork */
+.dungeon-bg {
+    min-height: 100vh;
+    position: relative;
+    color: #f3f4f6;
+    background-image: url('../images/dungeon-bg.jpg');
+    background-size: cover;
+    background-position: center center;
+}
+/* subtle overlay to darken the image for readable text */
+.dungeon-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(2,6,23,0.55), rgba(2,6,23,0.55));
+    pointer-events: none;
+}
+
+/* Game-like container centered */
+.game-stage {
+    position: relative;
+    z-index: 2;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding: 3rem 1rem;
+    min-height: calc(100vh - 80px);
+}
+
+.arcade-shell {
+    width: min(980px, 96%);
+    border-radius: 14px;
+    padding: 2rem;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+}
+
+/* Big central 'Enter' button */
+.enter-btn {
+    width: clamp(200px, 40vw, 420px);
+    height: clamp(110px, 22vw, 150px);
+    border-radius: 14px;
+    background: linear-gradient(180deg,#ffcb6b,#ff9f1c);
+    color: #111827;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    text-decoration:none;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.secondary-btn {
+    width: clamp(200px, 40vw, 420px);
+    height: clamp(110px, 22vw, 100px);
+    border-radius: 14px;
+    background: linear-gradient(180deg,#ffcb6b,#b97514);
+    color: #111827;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    font-weight:800;
+    text-decoration:none;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.enter-btn:hover, .enter-btn:focus { transform: translateY(-6px) scale(1.02); }
+.enter-btn .big { font-family: 'Press Start 2P', monospace; font-size: clamp(16px,2.4vw,28px); }
+.enter-btn .small { font-size: .85rem; color: rgba(17,24,39,0.85); margin-top:6px; }
+
+.secondary-buttons { margin-top:1.5rem; display:grid; gap:1rem; justify-content:center; }
+.secondary-btn { padding:.75rem 1rem; border-radius:10px; text-decoration:none; min-width:140px; text-align:center; }
+.secondary-btn:hover, .secondary:focus { transform: translateY(-4px); }
+
+/* Top-right hero icon */
+.hero-top {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    z-index: 3;
+    display:flex;
+    gap:.5rem;
+    align-items:center;
+}
+.hero-avatar { 
+    width:48px; height:48px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-weight:700; color:white;
+    background:linear-gradient(180deg,#3b82f6,#6366f1);
+    box-shadow:0 6px 14px rgba(0,0,0,0.5);
+}
+.hero-pill { 
+    background: rgba(0,0,0,0.45); color: #fff; padding:.4rem .6rem; 
+    border-radius:999px; font-weight:600; font-size:.9rem; 
+    box-shadow: 0 6px 14px rgba(0,0,0,0.45); 
+}
+
+/* Textareas */
+textarea.form-control {
+    background: #1e293b;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    resize: vertical;
+    min-height: 100px;
+}
+textarea.form-control:focus {
+    background: #1e293b;
+    color: #fff;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.25);
+}
+
+/* Progress container */
+.progress-wrapper { position: relative; margin-top: 1.5rem; }
+.progress-container {
+    background: #333;
+    height: 28px;
+    border-radius: 14px;
+    position: relative;
+    overflow: visible;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+.progress-bar-custom {
+    background: linear-gradient(90deg, #ffc107 0%, #ffb300 100%);
+    height: 100%;
+    border-radius: 14px;
+    transition: width 0.5s ease;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
+}
+.progressText {
+	color: #fff;
+}
+/* Markers */
+.markers { position: absolute; top: 6px; left: 0; width: 100%; height: 16px; pointer-events: none; z-index: 2; }
+.marker { position: absolute; width: 16px; height: 16px; transform: translateX(-50%); }
+
+/* Torch & Chest */
+.torch {
+    position: absolute; top: -12px; width: 48px; height: 48px;
+    transition: left 0.5s ease; pointer-events: none; z-index: 3;
+    filter: drop-shadow(0 2px 8px rgba(255, 193, 7, 0.6));
+}
+.chest {
+    position: absolute; right: -16px; top: -8px; width: 40px; height: 40px;
+    z-index: 3;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+/* Question & passage content */
+#questionContent {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border-left: 4px solid #ffc107;
+}
+#passageContent {
+    white-space: pre-wrap;
+    line-height: 1.8;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* Answer buttons */
+.answer-btn {
+    text-align: left;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: all 0.2s;
+    border: 2px solid transparent;
+}
+.answer-btn:hover { transform: translateX(4px); border-color: rgba(255, 193, 7, 0.3); }
+.answer-btn.active { transform: translateX(4px); box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3); }
+
+/* Score area */
+#scoreArea { text-align: center; }
+#rewardImg {
+    width: 80px; height: 80px; margin: 1rem auto; display: block;
+    filter: drop-shadow(0 4px 8px rgba(255, 193, 7, 0.4));
+}
+
+/* Loading state */
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container { padding-left: 1rem; padding-right: 1rem; }
+    h1 { font-size: 1.5rem; }
+    .torch { width: 36px; height: 36px; top: -8px; }
+    .chest { width: 32px; height: 32px; right: -12px; top: -6px; }
+    .progress-container { height: 24px; }
+    .marker { width: 14px; height: 14px; }
+    #rewardImg { width: 64px; height: 64px; }
+}
+@media (max-width: 576px) {
+    .torch { width: 28px; height: 28px; top: -6px; }
+    .chest { width: 28px; height: 28px; right: -10px; top: -4px; }
+    .progress-container { height: 20px; }
+    .marker { width: 12px; height: 12px; }
+    .markers { top: 4px; }
+    #questionContent { font-size: 1rem; padding: 0.75rem; }
+    .answer-btn { padding: 0.75rem; }
+}
+@media (max-width: 600px) {
+    .arcade-shell { padding: 1rem; }
+    .hero-avatar { width:40px;height:40px; }
+    .hero-pill { display:none; }
+}
+
+/* Utility */
+* { box-sizing: border-box; }
+.container { max-width: 900px; }
+
+
+.correct {
+    background-color: #16a34a !important; /* green-600 */
+    color: white !important;
+    border-color: #16a34a !important;
+}
+.incorrect {
+    background-color: #dc2626 !important; /* red-600 */
+    color: white !important;
+    border-color: #dc2626 !important;
+}
