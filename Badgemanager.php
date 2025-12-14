@@ -9,6 +9,9 @@
  *   $newBadges = $badgeManager->checkAndAwardBadges();
  */
 
+require_once __DIR__ . '/LevelManager.php';
+
+
 class BadgeManager {
     private $pdo;
     private $userId;
@@ -379,15 +382,15 @@ class BadgeManager {
             ");
             $stmt->execute([$this->userId, $badgeId]);
             
-            // Award points
-            $stmt = $this->pdo->prepare("UPDATE users SET points = points + ? WHERE id = ?");
-            $stmt->execute([$points, $this->userId]);
+            // Award XP using LevelManager for consistent leveling
+            $levelManager = new LevelManager($this->pdo, $this->userId);
+            $levelResult = $levelManager->awardXP($points, 'badge');
             
-            // Verify points were added
-            $stmt = $this->pdo->prepare("SELECT points FROM users WHERE id = ?");
-            $stmt->execute([$this->userId]);
-            $newPoints = $stmt->fetchColumn();
-            error_log("User {$this->userId} now has $newPoints total points");
+            if ($levelResult['success']) {
+                error_log("Badge XP awarded: {$levelResult['old_points']} → {$levelResult['new_points']} " .
+                         "(Level {$levelResult['old_level']} → {$levelResult['new_level']})" .
+                         ($levelResult['leveled_up'] ? " LEVEL UP!" : ""));
+            }
             
         } catch (Exception $e) {
             error_log("Failed to award badge: " . $e->getMessage());

@@ -78,7 +78,7 @@ try {
             'icon' => $badge['icon'],
             'points_reward' => (int)$badge['points_reward'],
             'category' => $badge['category'],
-            'is_rare' => in_array($badge['category'], ['mastery', 'secret']),
+            'is_rare' => (int)$badge['points_reward'] >= 250, // Rare if 250+ XP
             'current_tier' => $currentTier,
             'total_tiers' => max(1, $totalTiers), // At least 1 tier
             'next_tier_title' => $nextTierTitle

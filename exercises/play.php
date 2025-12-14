@@ -1,7 +1,8 @@
 <?php
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../BadgeManager.php';
+require_once __DIR__ . '/../LevelManager.php';
 
-require_once __DIR__ . '/../BadgeManager.php'; // BADGE SYSTEM
 if (!is_logged_in()) {
     header('Location: ../auth/signin.php');
     exit;
@@ -485,19 +486,15 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             $upd->execute([$finalXP, $reward, $elapsedTime, $attemptId]);
 
 
-            // Update user points and calculate new level
-            $oldPoints = (int)$user['points'];
-            $newPoints = $oldPoints + $incrementalXP;
+            $pdo->commit();  // Commit transaction first
 
-            // Level calculation: 100 XP per level
-            $newLevel = floor($newPoints / 100) + 1;
+            // Award XP and handle leveling
+            $levelManager = new LevelManager($pdo, $userId);
+            $levelResult = $levelManager->awardXP($incrementalXP, 'exercise');
 
-            $updUser = $pdo->prepare("UPDATE users SET points=?, level=? WHERE id=?");
-            $updUser->execute([$newPoints, $newLevel, $userId]);
-
-            $leveledUp = ($newLevel > (int)$user['level']);
-
-            $pdo->commit();
+            $newPoints = $levelResult['new_points'];
+            $newLevel = $levelResult['new_level'];
+            $leveledUp = $levelResult['leveled_up'];
     // ✅ BADGE SYSTEM: Check badges AFTER transaction commits
     try {
         $badgeManager = new BadgeManager($pdo, $userId);
