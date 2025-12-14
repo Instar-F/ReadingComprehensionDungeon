@@ -10,7 +10,7 @@ class AchievementNotificationSystem {
         this.autoCheckInterval = null;
         this.apiEndpoint = '../api/check_badges.php';
         this.maxVisibleNotifications = 5;
-        this.notificationDuration = 3000; // 3 seconds (was 4)
+        this.notificationDuration = 5000;
         this.stackDelay = 50; // 50ms delay between notifications (was 150ms)
         
         // Preload sounds
@@ -52,33 +52,37 @@ class AchievementNotificationSystem {
             const oldest = this.activeNotifications[0];
             this.hide(oldest.element, true);
         }
-        
+
         const notification = this.createNotificationElement(badge);
         document.body.appendChild(notification);
-        
+
         const notificationData = {
             element: notification,
             badge: badge,
             timestamp: Date.now()
         };
-        
+
         this.activeNotifications.push(notificationData);
-        
+
+        // 🔹 Position correctly BEFORE showing
+        this.repositionNotifications();
+
         // Play sound
         this.playSound(badge.is_rare);
-        
+
         // Show with animation
         requestAnimationFrame(() => {
             notification.classList.add('show');
         });
-        
-        // Auto-hide after duration
+
+        // Auto-hide
         setTimeout(() => {
             this.hide(notification);
         }, this.notificationDuration);
-        
+
         return notificationData;
     }
+
     
     /**
      * Play achievement sound
@@ -200,11 +204,17 @@ class AchievementNotificationSystem {
      * Reposition active notifications after one is removed
      */
     repositionNotifications() {
-        this.activeNotifications.forEach((notificationData, index) => {
-            const topPosition = 20 + (index * 65); // 65px spacing for compact notifications
-            notificationData.element.style.top = topPosition + 'px';
+        let topOffset = 20;
+
+        this.activeNotifications.forEach(({ element }) => {
+            element.style.top = `${topOffset}px`;
+            element.style.right = '20px';
+            element.style.position = 'fixed';
+
+            topOffset += element.offsetHeight + 10; // 10px gap
         });
     }
+
     
     /**
      * Check for new badges from server
