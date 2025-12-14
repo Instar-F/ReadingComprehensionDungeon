@@ -40,7 +40,6 @@ $user = current_user($pdo);
 
         <div class="secondary-buttons">
           <a href="profile.php" class="secondary-btn" role="button">Profile</a>
-          <a href="achievements.php" class="secondary-btn" role="button">Achievements</a>
           <a href="settings.php" class="secondary-btn" role="button">Settings</a>
           <a href="auth/logout.php" class="secondary-btn" role="button">Logga ut</a>
         </div>
