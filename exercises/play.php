@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config.php';
 
+require_once __DIR__ . '/../BadgeManager.php'; // BADGE SYSTEM
 if (!is_logged_in()) {
     header('Location: ../auth/signin.php');
     exit;
@@ -452,20 +453,20 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             $bonusXP = 0;
 
             switch ($reward) {
-                case 'iron':
-                    $bonusXP = (int)($baseXP * 0.1);
+                case 'copper':
+                    $bonusXP = (int)($baseXP * 0.4);
                     break;
-                case 'silver':
-                    $bonusXP = (int)($baseXP * 0.25);
+                case 'iron':
+                    $bonusXP = (int)($baseXP * 0.6);
                     break;
                 case 'gold':
-                    $bonusXP = (int)($baseXP * 0.5);
+                    $bonusXP = (int)($baseXP * 0.8);
                     break;
                 case 'diamond':
                     $bonusXP = (int)($baseXP * 1.0);
                     break;
                 case 'emerald':
-                    $bonusXP = (int)($baseXP * 2.0);
+                    $bonusXP = (int)($baseXP * 1.5);
                     break;
             }
 
@@ -483,6 +484,7 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             $upd = $pdo->prepare("UPDATE attempt_sessions SET finished_at=NOW(), score=?, reward=?, elapsed_time=? WHERE id=?");
             $upd->execute([$finalXP, $reward, $elapsedTime, $attemptId]);
 
+
             // Update user points and calculate new level
             $oldPoints = (int)$user['points'];
             $newPoints = $oldPoints + $incrementalXP;
@@ -496,7 +498,25 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             $leveledUp = ($newLevel > (int)$user['level']);
 
             $pdo->commit();
-
+    // ✅ BADGE SYSTEM: Check badges AFTER transaction commits
+    try {
+        $badgeManager = new BadgeManager($pdo, $userId);
+        $badgeManager->updateExerciseProgress($exerciseId, $finalXP, $reward);
+        $newBadges = $badgeManager->checkAndAwardBadges();
+        
+        if (!empty($newBadges)) {
+            error_log("Awarded " . count($newBadges) . " new badges to user $userId");
+            foreach ($newBadges as $badge) {
+                error_log("  - {$badge['title']}: +{$badge['points_reward']} XP");
+            }
+        }
+        
+        // Refresh user data to get updated points
+        $user = current_user($pdo);
+        $newPoints = (int)$user['points'];  // Update with badge XP
+    } catch (Exception $e) {
+        error_log("Badge system error: " . $e->getMessage());
+    }
             // Fetch all answers for reporting
             $answerStmt = $pdo->prepare("SELECT correct FROM attempt_answers WHERE attempt_id=? ORDER BY id ASC");
             $answerStmt->execute([$attemptId]);
@@ -625,7 +645,8 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?php echo htmlspecialchars($exercise['title']); ?> — Öva</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="../assets/css/style.css">
+  <link rel="stylesheet" href="../assets/css/style.css">
+<link rel="stylesheet" href="../assets/css/achievement-notifications.css">
 <style>
 * {
     box-sizing: border-box;
@@ -877,7 +898,7 @@ textarea.form-control:focus {
 }
 </style>
 </head>
-<body>
+<body class="dungeon-bg">
 
 <div class="timer-display" id="timerDisplay" style="display:none !important;">00:00</div>
 
@@ -1401,6 +1422,14 @@ async function finishAttempt() {
             if (scoreProgressBar && scoreMarkersDiv) {
                 updateProgress(false, scoreProgressBar, scoreMarkersDiv, null);
             }
+            // Trigger badge check after short delay
+            setTimeout(() => {
+                if (window.triggerAchievementCheck) {
+                    window.triggerAchievementCheck();
+                } else if (window.achievementSystem) {
+                    window.achievementSystem.checkNewBadges();
+                }
+            }, 500);
             
         } else {
             alert('Misslyckades avsluta försök: ' + (json.error || 'okänt'));
@@ -1423,5 +1452,8 @@ window.addEventListener('resize', () => {
     }
 });
 </script>
+
+<!-- Achievement Notification System -->
+<script src="../assets/js/achievement-notifications.js"></script>
 </body>
 </html>

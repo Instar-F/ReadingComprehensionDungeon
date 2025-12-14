@@ -1,0 +1,227 @@
+/* Minecraft-Style Achievement Notification System */
+
+.achievement-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    background: rgba(33, 33, 33, 0.95);
+    border: 2px solid #555;
+    box-shadow: 
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+        0 3px 0 rgba(0, 0, 0, 0.5),
+        0 6px 16px rgba(0, 0, 0, 0.7);
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    font-family: 'Minecraft', 'Press Start 2P', monospace;
+    color: #fff;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+.achievement-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.achievement-notification.hide {
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s ease-in;
+}
+
+/* Rare achievement (purple) */
+.achievement-notification.rare {
+    background: rgba(85, 26, 139, 0.95);
+    border-color: #a855f7;
+    box-shadow: 
+        inset 0 0 0 1px rgba(168, 85, 247, 0.3),
+        0 3px 0 rgba(68, 21, 111, 0.8),
+        0 6px 16px rgba(168, 85, 247, 0.5),
+        0 0 20px rgba(168, 85, 247, 0.3);
+}
+
+/* Achievement icon */
+.achievement-icon {
+    width: 40px;
+    height: 40px;
+    background: rgba(139, 92, 46, 0.9);
+    border: 2px solid #3e2723;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    position: relative;
+}
+
+/* Content area */
+.achievement-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.achievement-header {
+    font-size: 8px;
+    color: #ffff55;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+    margin-bottom: 2px;
+    letter-spacing: 0.5px;
+}
+
+.achievement-header.rare {
+    color: #e9b3ff;
+}
+
+.achievement-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #ffffff;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+/* Tier info with stars and XP */
+.achievement-tier-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 3px;
+}
+
+.achievement-stars {
+    display: flex;
+    gap: 1px;
+    font-size: 10px;
+}
+
+.achievement-star {
+    color: #ffd700;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+.achievement-star.empty {
+    color: #444;
+}
+
+.achievement-points {
+    font-size: 9px;
+    color: #55ff55;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+    margin-left: auto;
+}
+
+/* Next tier preview (for incomplete tiers) */
+.achievement-next-tier {
+    font-size: 8px;
+    color: #888;
+    margin-top: 2px;
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.8);
+}
+
+/* Stacking multiple notifications */
+.achievement-notification:nth-child(2) {
+    top: 85px;
+}
+
+.achievement-notification:nth-child(3) {
+    top: 150px;
+}
+
+.achievement-notification:nth-child(4) {
+    top: 215px;
+}
+
+.achievement-notification:nth-child(5) {
+    top: 280px;
+}
+
+/* Hover effect */
+.achievement-notification:hover {
+    cursor: pointer;
+    border-color: #888;
+}
+
+.achievement-notification.rare:hover {
+    border-color: #c084fc;
+}
+
+/* Bounce animation on appear */
+@keyframes minecraftBounce {
+    0% {
+        transform: translateX(400px) scale(0.8);
+        opacity: 0;
+    }
+    60% {
+        transform: translateX(-10px) scale(1.05);
+        opacity: 1;
+    }
+    80% {
+        transform: translateX(5px) scale(0.98);
+    }
+    100% {
+        transform: translateX(0) scale(1);
+        opacity: 1;
+    }
+}
+
+.achievement-notification.show {
+    animation: minecraftBounce 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Pixel border effect */
+.achievement-notification::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: 
+        linear-gradient(to right, transparent 0%, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 3px, transparent 3px),
+        linear-gradient(to bottom, transparent 0%, transparent 2px, rgba(255,255,255,0.1) 2px, rgba(255,255,255,0.1) 3px, transparent 3px);
+    background-size: 8px 8px;
+    pointer-events: none;
+    opacity: 0.3;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .achievement-notification {
+        width: calc(100% - 40px);
+        left: 20px;
+        right: 20px;
+        transform: translateY(-150px);
+    }
+    
+    .achievement-notification.show {
+        transform: translateY(0);
+    }
+    
+    .achievement-notification.hide {
+        transform: translateY(-150px);
+    }
+    
+    .achievement-notification:nth-child(2),
+    .achievement-notification:nth-child(3),
+    .achievement-notification:nth-child(4),
+    .achievement-notification:nth-child(5) {
+        top: 20px;
+    }
+    
+    .achievement-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 20px;
+    }
+    
+    .achievement-title {
+        font-size: 10px;
+    }
+}

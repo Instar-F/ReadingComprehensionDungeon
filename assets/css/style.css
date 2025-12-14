@@ -203,8 +203,8 @@ margin-right: 10px; justify-content: left; align-items: center; display: inline-
     min-height: 100vh;
     position: relative;
     color: #f3f4f6;
-    background-image: url('../images/dungeon-bg.jpg');
-    background-size: cover;
+    background-image: url('../img/dirt.jpg');
+    background-size: 100px 100px;
     background-position: center center;
 }
 /* subtle overlay to darken the image for readable text */
