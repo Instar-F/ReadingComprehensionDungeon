@@ -40,7 +40,7 @@ $earnedBadges = array_filter($badges, fn($b) => $b['earned']);
 $totalBadges = count($badges);
 $earnedCount = count($earnedBadges);
 
-// Question type stats - count exercises completed, not individual questions
+// Question type stats
 $questionTypeStats = $pdo->prepare("
     SELECT 
         q.type,
@@ -118,396 +118,29 @@ $questionTypeNames = [
 <title>Min Profil — RC Dungeon</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/style.css">
-<style>
-/* Remove dark overlay for profile page and make background repeat */
-body.dungeon-bg::before {
-    display: none;
-}
-
-body.dungeon-bg {
-    background-image: url('assets/images/dungeon-bg.jpg');
-    background-size: auto;
-    background-repeat: repeat;
-    background-position: top left;
-}
-
-.compact-profile {
-    max-width: 1400px;
-    margin: 0 auto;
-    position: relative;
-    z-index: 1;
-}
-
-.stat-mini {
-    background: rgba(15, 23, 36, 0.85);
-    backdrop-filter: blur(10px);
-    border-radius: 8px;
-    padding: 0.75rem;
-    text-align: center;
-    border: 1px solid rgba(255, 193, 7, 0.2);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.stat-mini-value {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #ffc107;
-}
-
-.stat-mini-label {
-    font-size: 0.75rem;
-    color: rgba(230, 238, 248, 0.7);
-    margin-top: 0.25rem;
-}
-
-
-.filter-chips {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-}
-
-.filter-chip {
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    background: rgba(15, 23, 36, 0.70);
-    backdrop-filter: blur(8px);
-    color: rgba(255, 255, 255, 0.8);
-    cursor: pointer;
-    transition: all 0.3s;
-    font-size: 0.875rem;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-}
-
-.filter-chip:hover {
-    border-color: rgba(255, 193, 7, 0.5);
-}
-
-.filter-chip.active {
-    background: rgba(255, 193, 7, 0.2);
-    border-color: #ffc107;
-    color: #ffc107;
-}
-
-.storyline-card {
-    background: rgba(15, 23, 36, 0.70);
-    backdrop-filter: blur(8px);
-    border-radius: 8px;
-    padding: 1rem;
-    margin-bottom: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    transition: all 0.3s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.storyline-card:hover {
-    border-color: rgba(255, 193, 7, 0.3);
-}
-
-.storyline-progress-bar {
-    height: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-    overflow: hidden;
-    margin-top: 0.5rem;
-}
-
-.storyline-progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #667eea, #764ba2);
-    transition: width 0.3s;
-}
-
-.question-type-mini {
-    background: rgba(15, 23, 36, 0.70);
-    backdrop-filter: blur(8px);
-    border-radius: 8px;
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.progress-circle-mini {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: conic-gradient(#ffc107 calc(var(--progress) * 1%), rgba(255,255,255,0.1) 0);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-}
-
-.progress-circle-mini::before {
-    content: '';
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: #0f1724;
-    position: absolute;
-}
-
-.progress-text-mini {
-    font-size: 0.75rem;
-    font-weight: bold;
-    z-index: 1;
-}
-
-.section-compact {
-    background: rgba(15, 23, 36, 0.90);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid rgba(255, 193, 7, 0.2);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-}
-
-.section-title {
-    font-size: 1.25rem;
-    font-weight: bold;
-    color: #ffc107;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.badge-grid-compact {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-    gap: 0.5rem;
-}
-
-.reward-mini {
-    width: 24px;
-    height: 24px;
-    display: inline-block;
-}
-
-.profile-header-compact {
-    background: rgba(15, 23, 36, 0.90);
-    backdrop-filter: blur(10px);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid rgba(255, 193, 7, 0.2);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-}
-
-.hidden {
-    display: none !important;
-}
-
-/* Clash of Clans Style Badge Cards */
-.badge-list-coc {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.badge-card-coc {
-    display: flex;
-    align-items: center;
-    background: rgba(15, 23, 36, 0.70);
-    backdrop-filter: blur(8px);
-    border-radius: 12px;
-    padding: 1rem;
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    position: relative;
-    overflow: hidden;
-}
-
-.badge-card-coc::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 4px;
-    background: rgba(255, 255, 255, 0.2);
-    transition: all 0.3s;
-}
-
-.badge-card-coc.earned::before {
-    background: linear-gradient(180deg, #ffc107, #ff9800);
-    box-shadow: 0 0 12px rgba(255, 193, 7, 0.5);
-}
-
-.badge-card-coc.earned {
-    border-color: rgba(255, 193, 7, 0.3);
-    background: rgba(255, 193, 7, 0.05);
-}
-
-.badge-card-coc.locked {
-    opacity: 0.7;
-}
-
-.badge-card-coc:hover {
-    transform: translateX(4px);
-    border-color: rgba(255, 193, 7, 0.4);
-}
-
-/* Badge Icon */
-.badge-icon-coc {
-    width: 64px;
-    height: 64px;
-    min-width: 64px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2.5rem;
-    background: rgba(255, 193, 7, 0.1);
-    border-radius: 12px;
-    border: 2px solid rgba(255, 193, 7, 0.2);
-    margin-right: 1rem;
-}
-
-.badge-card-coc.earned .badge-icon-coc {
-    background: rgba(255, 193, 7, 0.2);
-    border-color: rgba(255, 193, 7, 0.4);
-    box-shadow: 0 0 16px rgba(255, 193, 7, 0.3);
-    animation: glow-pulse 2s infinite;
-}
-
-@keyframes glow-pulse {
-    0%, 100% { box-shadow: 0 0 16px rgba(255, 193, 7, 0.3); }
-    50% { box-shadow: 0 0 24px rgba(255, 193, 7, 0.5); }
-}
-
-/* Badge Info */
-.badge-info-coc {
-    flex: 1;
-    min-width: 0;
-}
-
-.badge-title-coc {
-    font-size: 1.1rem;
-    font-weight: bold;
-    color: #fff;
-    margin-bottom: 0.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.badge-check {
-    color: #4CAF50;
-    font-size: 1.2rem;
-    animation: pop-in 0.3s ease-out;
-}
-
-@keyframes pop-in {
-    0% { transform: scale(0); }
-    50% { transform: scale(1.2); }
-    100% { transform: scale(1); }
-}
-
-.badge-description-coc {
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 0.5rem;
-}
-
-.badge-progress-bar-coc {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    overflow: hidden;
-    margin-top: 0.5rem;
-    margin-bottom: 0.25rem;
-}
-
-.badge-progress-fill-coc {
-    height: 100%;
-    background: linear-gradient(90deg, #ffc107, #ff9800);
-    border-radius: 4px;
-    transition: width 0.5s ease;
-    box-shadow: 0 0 8px rgba(255, 193, 7, 0.5);
-}
-
-.badge-progress-text-coc {
-    font-size: 0.75rem;
-    color: rgba(255, 193, 7, 0.9);
-    font-weight: 600;
-}
-
-/* Badge Reward */
-.badge-reward-coc {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-width: 80px;
-    padding: 0.5rem;
-    background: rgba(255, 193, 7, 0.1);
-    border-radius: 8px;
-    border: 2px solid rgba(255, 193, 7, 0.2);
-}
-
-.badge-card-coc.earned .badge-reward-coc {
-    background: rgba(255, 193, 7, 0.2);
-    border-color: rgba(255, 193, 7, 0.4);
-}
-
-.badge-points-coc {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #ffc107;
-    line-height: 1;
-}
-
-.badge-points-label-coc {
-    font-size: 0.75rem;
-    color: rgba(255, 193, 7, 0.8);
-    margin-top: 0.25rem;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .badge-card-coc {
-        padding: 0.75rem;
-    }
-    
-    .badge-icon-coc {
-        width: 48px;
-        height: 48px;
-        min-width: 48px;
-        font-size: 2rem;
-    }
-    
-    .badge-title-coc {
-        font-size: 1rem;
-    }
-    
-    .badge-reward-coc {
-        min-width: 60px;
-    }
-    
-    .badge-points-coc {
-        font-size: 1.25rem;
-    }
-}
-</style>
 </head>
-<body class="dungeon-bg">
+<body class="dirt-bg">
+<header style="position:relative;">
+    <div class="hero-top">
+      <div class="hero-avatar" title="Din hjälte"><?php echo strtoupper(substr($user['name'] ?? $user['email'],0,1)); ?></div>
+      <div class="hero-pill">XP <?php echo (int)$user['points']; ?> • Lv <?php echo (int)$user['level']; ?></div>
+    </div>
+</header>
+
+<main class="dirt-bg">
 <div class="container compact-profile py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1 class="h3 mb-0">📊 Min Profil</h1>
-        <a href="dashboard.php" class="btn btn-outline-light">← Tillbaka</a>
+        <h2 class="mb-1 gametext">📊 MIN PROFIL</h2>
+        <a href="menu.php" class="btn btn-outline-light">← Tillbaka</a>
     </div>
 
     <!-- Compact Header -->
     <div class="profile-header-compact">
         <div class="row align-items-center">
             <div class="col-md-2 text-center mb-3 mb-md-0">
-                <div style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: white; margin: 0 auto;">
+                <div class="profile-avatar">
                     <?= strtoupper(substr($username, 0, 2)) ?>
                 </div>
                 <div style="margin-top: 0.5rem;">
@@ -549,8 +182,8 @@ body.dungeon-bg {
                     </div>
                     <div class="col-4 col-md-2">
                         <div class="stat-mini">
-                            <div class="stat-mini-value"><?= gmdate("H:i", $stats['total_time_spent']) ?></div>
-                            <div class="stat-mini-label">Tid</div>
+                            <div class="stat-mini-value"><?= gmdate('H:i', $stats['total_time_spent']) ?></div>
+                            <div class="stat-mini-label">⏱️ Tid</div>
                         </div>
                     </div>
                 </div>
@@ -558,52 +191,45 @@ body.dungeon-bg {
         </div>
     </div>
 
-    <div class="row">
-        <!-- Storylines and Question Types -->
-        <div class="col-12">
-            <div class="row">
-                <!-- Storylines Progress -->
-                <?php if (!empty($storylineProgress)): ?>
-                <div class="col-lg-6">
-                <div class="section-compact">
-                    <div class="section-title">
-                        <i class="fas fa-book"></i> Äventyrsspår
-                    </div>
-                <?php foreach ($storylineProgress as $sp): 
-                    $progress = $sp['total_exercises'] > 0 ? ($sp['completed_exercises'] / $sp['total_exercises']) * 100 : 0;
-                    $avgStars = round($sp['avg_reward_level']);
+    <div class="row mt-4">
+        <!-- Left Column -->
+        <div class="col-12 col-lg-6">
+            <!-- Storyline Progress -->
+            <?php if (!empty($storylineProgress)): ?>
+            <div class="section-compact mb-4">
+                <div class="section-title">
+                    <i class="fas fa-book-open"></i> Storyline Framsteg
+                </div>
+                <?php foreach ($storylineProgress as $sl): 
+                    $completion = $sl['total_exercises'] > 0 ? ($sl['completed_exercises'] / $sl['total_exercises']) * 100 : 0;
                 ?>
-                <div class="storyline-card">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <div style="font-weight: bold; font-size: 1rem;">
-                                <?= htmlspecialchars($sp['icon']) ?> <?= htmlspecialchars($sp['name']) ?>
+                <div class="storyline-progress-item">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <div style="font-weight: bold; font-size: 0.95rem;">
+                                <?= htmlspecialchars($sl['icon'] ?? '📖') ?> <?= htmlspecialchars($sl['name']) ?>
                             </div>
-                            <div style="font-size: 0.75rem; color: rgba(255, 255, 255, 0.6); margin-top: 0.25rem;">
-                                <?= $sp['completed_exercises'] ?> / <?= $sp['total_exercises'] ?> övningar
-                            </div>
-                            <div class="storyline-progress-bar">
-                                <div class="storyline-progress-fill" style="width: <?= $progress ?>%"></div>
+                            <div style="font-size: 0.75rem; color: rgba(255, 255, 255, 0.6);">
+                                <?= $sl['completed_exercises'] ?> / <?= $sl['total_exercises'] ?> övningar slutförda
                             </div>
                         </div>
-                        <div style="display: flex; gap: 2px; margin-left: 1rem;">
-                            <?php for ($i = 1; $i <= 5; $i++): ?>
-                                <span style="color: <?= $i <= $avgStars ? '#ffc107' : 'rgba(255,255,255,0.2)' ?>; font-size: 0.875rem;">⭐</span>
-                            <?php endfor; ?>
+                        <div class="progress-circle-mini" style="--progress: <?= $completion ?>;">
+                            <span class="progress-text-mini"><?= round($completion) ?>%</span>
                         </div>
+                    </div>
+                    <div class="progress" style="height: 8px; background: rgba(255, 255, 255, 0.1);">
+                        <div class="progress-bar bg-warning" style="width: <?= $completion ?>%"></div>
                     </div>
                 </div>
                 <?php endforeach; ?>
-                </div>
-                </div>
-                </div>
-                <?php endif; ?>
+            </div>
+            <?php endif; ?>
 
-                <!-- Question Type Mastery -->
-                <div class="col-lg-6">
-                <div class="section-compact">
+            <!-- Question Type Performance -->
+            <?php if (!empty($questionStats)): ?>
+            <div class="section-compact">
                 <div class="section-title">
-                    <i class="fas fa-list"></i> Frågetyp-mästerskap
+                    <i class="fas fa-chart-bar"></i> Prestanda per Frågetyp
                 </div>
                 <div class="row g-2">
                     <?php foreach ($questionStats as $qs): 
@@ -629,14 +255,12 @@ body.dungeon-bg {
                     </div>
                     <?php endforeach; ?>
                 </div>
-                </div>
             </div>
-            </div>
-            </div>
+            <?php endif; ?>
         </div>
 
-        <!-- Right Column - Make it full width for CoC style -->
-        <div class="col-12">
+        <!-- Right Column -->
+        <div class="col-12 col-lg-6">
             <!-- Badges Section -->
             <div class="section-compact">
                 <div class="section-title">
@@ -655,10 +279,9 @@ body.dungeon-bg {
                     <?php endforeach; ?>
                 </div>
 
-                <!-- CoC Style Badge List -->
+                <!-- Badge List -->
                 <div class="badge-list-coc">
                     <?php 
-                    // Get user progress for badges
                     foreach ($badges as $badge): 
                         $progress = $badgeManager->getBadgeProgress($badge);
                         $required = (int)$badge['requirement_value'];
@@ -747,13 +370,13 @@ body.dungeon-bg {
         </div>
     </div>
 </div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // Badge filtering
 document.querySelectorAll('.filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-        // Update active state
         document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
         

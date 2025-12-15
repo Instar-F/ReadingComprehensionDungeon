@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config.php';
 if (!is_logged_in()) { header('Location: ../auth/signin.php'); exit; }
 
 $exid = isset($_GET['exid']) ? (int)$_GET['exid'] : 0;
-if (!$exid) { header('Location: ../dashboard.php'); exit; }
+if (!$exid) { header('Location: ../menu.php'); exit; }
 
 // Make sure exercise exists
 $stmt = $pdo->prepare('SELECT id FROM exercises WHERE id = ? LIMIT 1');

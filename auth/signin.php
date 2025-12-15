@@ -14,7 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $u = $stmt->fetch();
         if ($u && password_verify($password, $u['password_hash'])) {
             $_SESSION['user_id'] = $u['id'];
-            header('Location: ../dashboard.php');
+            header('Location: ../menu.php');
             exit;
         } else {
             $errors[] = 'Fel e-post eller lösenord.';
@@ -31,9 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/style.css">
 </head>
-<body class="bg-light">
-  <div class="container py-5">
-    <div class="card mx-auto" style="max-width:480px;">
+<body class="sky-bg">
+  <div class="centercontainer container py-5">
+    <div class="card mx-auto" style="min-width:50vw; max-height:750px;">
       <div class="card-body">
         <h2 class="h5">Logga in</h2>
         <?php if ($errors): ?>

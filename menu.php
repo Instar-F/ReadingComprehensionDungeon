@@ -13,10 +13,10 @@ $user = current_user($pdo);
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Dashboard - Lärportal</title>
+  <title>Meny</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="dungeon-bg">
@@ -27,21 +27,20 @@ $user = current_user($pdo);
     </div>
   </header>
 
-  <main class="dungeon-bg">
+  <main class="dirt-bg">
     <div class="game-stage">
       <div class="arcade-shell">
-        <h2 class="text-center mb-2" style="font-family:'Press Start 2P',monospace;letter-spacing:1px;color:#fff;">ÄVENTYRET VÄNTAR!</h2>
-        <p class="text-center small">Klicka "Enter" för att starta äventyret och tjäna XP.</p>
+        <h2 class="text-center mb-2 gametext">ÄVENTYRET VÄNTAR!</h2>
+        <p class="text-center small">Gå genom uppgifter och tjäna XP!</p>
 
         <a href="exercises/entrance.php" class="enter-btn" role="button" aria-label="Enter - Starta övningar">
           <div class="big">ENTER</div>
-          <div class="small">Starta äventyr & tjäna XP</div>
+          <div class="small">Starta spelandet & tjäna XP</div>
         </a>
 
         <div class="secondary-buttons">
           <a href="profile.php" class="secondary-btn" role="button">Profile</a>
-          <a href="settings.php" class="secondary-btn" role="button">Settings</a>
-          <a href="auth/logout.php" class="secondary-btn" role="button">Logga ut</a>
+          <a href="auth/signout.php" class="secondary-btn" role="button">Logga ut</a>
         </div>
       </div>
     </div>

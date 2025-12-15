@@ -40,109 +40,18 @@ function formatTime($seconds) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Entré - Uppdrag</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/style.css">
-  <style>
-    .exercise-card {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 1.5rem;
-      margin-bottom: 1rem;
-      transition: all 0.3s;
-      backdrop-filter: blur(10px);
-    }
-    
-    .exercise-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 8px 24px rgba(255, 193, 7, 0.2);
-      border-color: rgba(255, 193, 7, 0.3);
-    }
-    
-    .exercise-card.locked {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    
-    .exercise-card.locked:hover {
-      transform: none;
-      box-shadow: none;
-    }
-    
-    .reward-showcase {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-      flex-wrap: wrap;
-    }
-    
-    .reward-icon {
-      width: 32px;
-      height: 32px;
-      opacity: 0.3;
-      transition: all 0.2s;
-      filter: grayscale(100%);
-    }
-    
-    .reward-icon.earned {
-      opacity: 1;
-      filter: grayscale(0%);
-      animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.1); }
-    }
-    
-    .difficulty-badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 12px;
-      font-size: 0.875rem;
-      font-weight: 600;
-    }
-    
-    .difficulty-easy {
-      background: rgba(76, 175, 80, 0.2);
-      color: #4CAF50;
-      border: 1px solid rgba(76, 175, 80, 0.4);
-    }
-    
-    .difficulty-medium {
-      background: rgba(255, 152, 0, 0.2);
-      color: #FF9800;
-      border: 1px solid rgba(255, 152, 0, 0.4);
-    }
-    
-    .difficulty-hard {
-      background: rgba(244, 67, 54, 0.2);
-      color: #F44336;
-      border: 1px solid rgba(244, 67, 54, 0.4);
-    }
-    
-    .stats-row {
-      display: flex;
-      gap: 1rem;
-      margin-top: 0.75rem;
-      font-size: 0.875rem;
-      color: rgba(255, 255, 255, 0.7);
-    }
-    
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: 0.25rem;
-    }
-  </style>
 </head>
-<body class="dungeon-bg">
+<body class="dirt-bg">
+  <main class="dirt-bg">
   <div class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
-        <h1 class="h3 mb-1">Välj ditt uppdrag</h1>
-        <p class="text-muted mb-0">Nivå <?php echo (int)$user['level']; ?> • <?php echo (int)$user['points']; ?> XP</p>
+        <h2 class="mb-1 gametext">Välj ditt uppdrag</h2>
+        <p class="mb-0">Nivå <?php echo (int)$user['level']; ?> • <?php echo (int)$user['points']; ?> XP</p>
       </div>
-      <a href="../dashboard.php" class="btn btn-outline-light">← Tillbaka</a>
+      <a href="../menu.php" class="btn btn-outline-light">← Tillbaka</a>
     </div>
 
     <div class="row">
@@ -162,7 +71,7 @@ function formatTime($seconds) {
           <div class="exercise-card <?php echo $locked ? 'locked' : ''; ?>">
             <div class="d-flex justify-content-between align-items-start mb-2">
               <div>
-                <h5 class="mb-1"><?php echo htmlspecialchars($r['title']); ?></h5>
+                <h5 class="mb-2"><?php echo htmlspecialchars($r['title']); ?></h5>
                 <span class="difficulty-badge difficulty-<?php echo htmlspecialchars($r['difficulty']); ?>">
                   <?php echo ucfirst($r['difficulty']); ?>
                 </span>
@@ -170,11 +79,11 @@ function formatTime($seconds) {
               
               <?php if ($locked): ?>
                 <div class="text-end">
-                  <div class="badge bg-danger mb-1">🔒 Låst</div>
-                  <div class="small text-muted">Kräver nivå <?php echo (int)$r['min_level']; ?></div>
+                  <div class="badge bg-danger mb-2">🔒 Låst</div>
+                  <div class="small">Kräver nivå <?php echo (int)$r['min_level']; ?></div>
                 </div>
               <?php else: ?>
-                <a href="play.php?exercise_id=<?php echo (int)$r['id']; ?>" class="btn btn-warning">
+                <a href="play.php?exercise_id=<?php echo (int)$r['id']; ?>" class="play-btn">
                   <?php echo $hasCompleted ? 'Gör igen' : 'Starta'; ?>
                 </a>
               <?php endif; ?>
@@ -208,7 +117,7 @@ function formatTime($seconds) {
               </div>
             <?php else: ?>
               <?php if (!$locked): ?>
-                <p class="text-muted small mt-2 mb-0">
+                <p class="small mt-2 mb-0">
                   <?php echo (int)$r['question_count']; ?> frågor • 
                   <?php if ($r['difficulty'] === 'easy'): ?>
                     Perfekt för nybörjare
@@ -219,6 +128,18 @@ function formatTime($seconds) {
                   <?php endif; ?>
                 </p>
               <?php endif; ?>
+              
+              <!-- ALWAYS SHOW REWARDS -->
+              <div class="reward-showcase">
+                <?php foreach ($rewards as $idx => $reward): ?>
+                  <img 
+                    src="../assets/img/<?php echo $reward; ?>.png" 
+                    alt="<?php echo $reward; ?>"
+                    class="reward-icon <?php echo ($idx <= $earnedIndex) ? 'earned' : 'empty'; ?>"
+                    title="<?php echo ucfirst($reward); ?>"
+                  >
+                <?php endforeach; ?>
+              </div>
             <?php endif; ?>
           </div>
         </div>
@@ -226,5 +147,6 @@ function formatTime($seconds) {
       <?php endif; ?>
     </div>
   </div>
+  </main>
 </body>
 </html>
