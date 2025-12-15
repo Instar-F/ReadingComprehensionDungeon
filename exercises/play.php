@@ -802,6 +802,42 @@ textarea.form-control:focus {
     cursor: move;
     transition: all 0.2s;
     border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.drag-handle {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    cursor: grab;
+    font-size: 1.5rem;
+    color: rgba(255, 255, 255, 0.7);
+    user-select: none;
+    touch-action: none;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.ordering-item-content {
+    flex: 1;
+    user-select: none;
+}
+
+.ordering-placeholder {
+    background: rgba(255, 193, 7, 0.2);
+    border: 2px dashed rgba(255, 193, 7, 0.5);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
 }
 
 .ordering-item:hover {
@@ -886,6 +922,24 @@ textarea.form-control:focus {
     #rewardImg {
         width: 64px;
         height: 64px;
+    }
+    
+    /* Mobile-specific ordering styles */
+    .ordering-item {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        gap: 0.5rem;
+    }
+    
+    .drag-handle {
+        width: 40px;
+        height: 40px;
+        font-size: 1.75rem;
+        background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .ordering-item-content {
+        font-size: 0.95rem;
     }
 }
 
@@ -997,6 +1051,16 @@ textarea.form-control:focus {
 const userId = <?php echo (int)$userId; ?>;
 const exerciseId = <?php echo (int)$exerciseId; ?>;
 const questions = <?php echo json_encode($clientQuestions, JSON_UNESCAPED_UNICODE); ?>;
+
+// Shuffle questions to randomize order
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+shuffleArray(questions);
 
 let currentQuestionIndex = 0;
 let correctness = [];
@@ -1189,11 +1253,29 @@ function renderQuestion() {
     questionContent.textContent = question.content;
     answerArea.innerHTML = '';
 
-    if (question.type === 'mcq' || question.type === 'truefalse') {
-        const shuffled = [...question.choices].sort(() => Math.random() - 0.5);
+    if (question.type === 'mcq') {
+        // Shuffle MCQ questions
+        const choicesToShow = [...question.choices].sort(() => Math.random() - 0.5);
         const container = document.createElement('div');
         container.className = 'list-group';
-        shuffled.forEach(ch => {
+        choicesToShow.forEach(ch => {
+            const btn = document.createElement('button');
+            btn.className = 'btn answer-btn btn-outline-light w-100 text-start';
+            btn.dataset.choiceId = ch.id;
+            btn.innerHTML = `<div>${ch.content}</div>`;
+            btn.addEventListener('click', () => {
+                Array.from(container.children).forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+            });
+            container.appendChild(btn);
+        });
+        answerArea.appendChild(container);
+    } else if (question.type === 'truefalse') {
+        // Don't shuffle true/false - keep consistent order
+        const choicesToShow = question.choices;
+        const container = document.createElement('div');
+        container.className = 'list-group';
+        choicesToShow.forEach(ch => {
             const btn = document.createElement('button');
             btn.className = 'btn answer-btn btn-outline-light w-100 text-start';
             btn.dataset.choiceId = ch.id;
@@ -1218,12 +1300,84 @@ function renderQuestion() {
             el.className = 'ordering-item';
             el.draggable = true;
             el.dataset.id = it.id;
-            el.textContent = it.content;
+            
+            // Create drag handle for mobile
+            const dragHandle = document.createElement('div');
+            dragHandle.className = 'drag-handle';
+            dragHandle.innerHTML = '&#8801;'; // ≡ symbol
+            
+            // Create content wrapper
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'ordering-item-content';
+            contentDiv.textContent = it.content;
+            
+            el.appendChild(dragHandle);
+            el.appendChild(contentDiv);
+            
+            // Desktop drag events
             el.addEventListener('dragstart', e => {
                 e.dataTransfer.setData('text/plain', it.id);
                 el.classList.add('dragging');
             });
             el.addEventListener('dragend', () => el.classList.remove('dragging'));
+            
+            // Mobile touch events
+            let touchStartY = 0;
+            let currentY = 0;
+            let isDragging = false;
+            let placeholder = null;
+            
+            dragHandle.addEventListener('touchstart', e => {
+                isDragging = true;
+                touchStartY = e.touches[0].clientY;
+                el.classList.add('dragging');
+                
+                // Create placeholder
+                placeholder = document.createElement('div');
+                placeholder.className = 'ordering-placeholder';
+                placeholder.style.height = el.offsetHeight + 'px';
+                el.parentNode.insertBefore(placeholder, el);
+                
+                el.style.position = 'relative';
+                el.style.zIndex = '1000';
+                e.preventDefault();
+            }, { passive: false });
+            
+            dragHandle.addEventListener('touchmove', e => {
+                if (!isDragging) return;
+                
+                currentY = e.touches[0].clientY;
+                const deltaY = currentY - touchStartY;
+                el.style.transform = `translateY(${deltaY}px)`;
+                
+                // Find element to insert before
+                const afterElement = getTouchAfterElement(list, currentY, el);
+                if (afterElement && afterElement !== placeholder) {
+                    list.insertBefore(placeholder, afterElement);
+                } else if (!afterElement && list.lastChild !== placeholder) {
+                    list.appendChild(placeholder);
+                }
+                
+                e.preventDefault();
+            }, { passive: false });
+            
+            dragHandle.addEventListener('touchend', e => {
+                if (!isDragging) return;
+                
+                isDragging = false;
+                el.classList.remove('dragging');
+                el.style.position = '';
+                el.style.transform = '';
+                el.style.zIndex = '';
+                
+                if (placeholder && placeholder.parentNode) {
+                    placeholder.parentNode.insertBefore(el, placeholder);
+                    placeholder.remove();
+                }
+                
+                e.preventDefault();
+            }, { passive: false });
+            
             list.appendChild(el);
         });
         
@@ -1239,6 +1393,21 @@ function renderQuestion() {
 
         function getDragAfterElement(container, y) {
             const draggableElements = [...container.querySelectorAll('.ordering-item:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+        
+        function getTouchAfterElement(container, y, currentElement) {
+            const draggableElements = [...container.querySelectorAll('.ordering-item, .ordering-placeholder')]
+                .filter(el => el !== currentElement);
+            
             return draggableElements.reduce((closest, child) => {
                 const box = child.getBoundingClientRect();
                 const offset = y - box.top - box.height / 2;
