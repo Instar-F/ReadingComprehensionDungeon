@@ -241,29 +241,30 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                     break;
 
                 case 'truefalse':
-                    $raw = strtolower(trim((string)($userAnswer['choice_id'] ?? '')));
-                    $userVal = ($raw === 'true') ? 1 : 0;
-                    $correctVal = (int)($question['correct_answer'] ?? 0);
-                    $isCorrect = ($userVal === $correctVal) ? 1 : 0;
+                    // True/false now works like MCQ - check against question_choices
+                    $choiceId = isset($userAnswer['choice_id']) ? (int)$userAnswer['choice_id'] : 0;
+                    if ($choiceId) {
+                        $chkStmt = $pdo->prepare("SELECT is_correct FROM question_choices WHERE id=? AND question_id=?");
+                        $chkStmt->execute([$choiceId, $questionId]);
+                        $row = $chkStmt->fetch(PDO::FETCH_ASSOC);
+                        $isCorrect = $row ? (int)$row['is_correct'] : 0;
+                    } else {
+                        $isCorrect = 0;
+                    }
                     $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
                 case 'fillblank':
-                    $answers = $userAnswer['answers'] ?? [];
-                    $blankStmt = $pdo->prepare("SELECT correct_text FROM blanks WHERE question_id=? ORDER BY blank_index ASC");
-                    $blankStmt->execute([$questionId]);
-                    $correctAnswers = array_column($blankStmt->fetchAll(PDO::FETCH_ASSOC), 'correct_text');
-
-                    $ok = count($answers) === count($correctAnswers);
-                    if ($ok) {
-                        foreach ($answers as $i => $a) {
-                            if (trim(strtolower($a)) !== trim(strtolower($correctAnswers[$i] ?? ''))) {
-                                $ok = false;
-                                break;
-                            }
-                        }
+                    // Fillblank now works like MCQ - user selects a choice_id
+                    $choiceId = isset($userAnswer['choice_id']) ? (int)$userAnswer['choice_id'] : 0;
+                    if ($choiceId) {
+                        $chkStmt = $pdo->prepare("SELECT is_correct FROM question_choices WHERE id=? AND question_id=?");
+                        $chkStmt->execute([$choiceId, $questionId]);
+                        $row = $chkStmt->fetch(PDO::FETCH_ASSOC);
+                        $isCorrect = $row ? (int)$row['is_correct'] : 0;
+                    } else {
+                        $isCorrect = 0;
                     }
-                    $isCorrect = $ok ? 1 : 0;
                     $awardedPoints = $isCorrect ? $pointsForQuestion : 0;
                     break;
 
@@ -599,10 +600,25 @@ foreach ($questions as $q) {
             $choicesMap[$q['id']] ?? []
         );
     } elseif ($q['type'] === 'truefalse') {
-        $clientChoices = [
-            ['id' => 'true', 'content' => 'Sant', 'pos' => 1],
-            ['id' => 'false', 'content' => 'Falskt', 'pos' => 2]
-        ];
+        // True/false now uses choices from database like MCQ
+        $clientChoices = array_map(
+            fn($c) => [
+                'id' => (int)$c['id'],
+                'content' => $c['content'],
+                'pos' => (int)$c['pos']
+            ],
+            $choicesMap[$q['id']] ?? []
+        );
+    } elseif ($q['type'] === 'fillblank') {
+        // Fill-in-the-blank uses choices just like MCQ
+        $clientChoices = array_map(
+            fn($c) => [
+                'id' => (int)$c['id'],
+                'content' => $c['content'],
+                'pos' => (int)$c['pos']
+            ],
+            $choicesMap[$q['id']] ?? []
+        );
     } elseif ($q['type'] === 'ordering') {
         // Pass ordering items to frontend
         $items = $orderingItemsMap[$q['id']] ?? [];
@@ -791,6 +807,76 @@ textarea.form-control:focus {
 .answer-btn.active {
     transform: translateX(4px);
     box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+}
+
+/* Fill-in-the-blank styles */
+.fillblank-container {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 2px solid rgba(255, 193, 7, 0.2);
+}
+
+.fillblank-text {
+    font-size: 1.2rem;
+    line-height: 1.8;
+    padding: 1rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.fillblank-text .text-part {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.fillblank-text .blank-marker {
+    display: inline-block;
+    min-width: 120px;
+    padding: 0.25rem 0.75rem;
+    margin: 0 0.5rem;
+    background: rgba(255, 193, 7, 0.3);
+    border-bottom: 3px solid rgba(255, 193, 7, 0.8);
+    border-radius: 4px;
+    font-weight: bold;
+    color: #ffc107;
+    animation: pulse 2s ease-in-out infinite;
+    transition: all 0.3s ease;
+}
+
+.fillblank-text .blank-marker.filled {
+    background: rgba(255, 193, 7, 0.5);
+    border-bottom-color: #ffc107;
+    color: #fff;
+    animation: none;
+    font-size: 1.1em;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.fillblank-instruction {
+    font-size: 0.95rem;
+    color: rgba(255, 193, 7, 0.9);
+    font-weight: 500;
+    text-align: center;
+}
+
+.fillblank-choice {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.fillblank-choice:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(255, 193, 7, 0.4) !important;
+}
+
+.fillblank-choice.active {
+    background: rgba(255, 193, 7, 0.2) !important;
+    border-color: rgba(255, 193, 7, 0.8) !important;
 }
 
 /* Ordering styles */
@@ -1250,7 +1336,15 @@ function showOrderingFeedback(breakdown, question) {
 function renderQuestion() {
     const question = questions[currentQuestionIndex];
     questionCounter.textContent = `Fråga ${currentQuestionIndex + 1} av ${questions.length}`;
-    questionContent.textContent = question.content;
+    
+    // For fillblank, we'll show the question in a special way, so hide the default display
+    if (question.type === 'fillblank') {
+        questionContent.style.display = 'none';
+    } else {
+        questionContent.style.display = 'block';
+        questionContent.textContent = question.content;
+    }
+    
     answerArea.innerHTML = '';
 
     if (question.type === 'mcq') {
@@ -1287,6 +1381,74 @@ function renderQuestion() {
             container.appendChild(btn);
         });
         answerArea.appendChild(container);
+    } else if (question.type === 'fillblank') {
+        // Fill-in-the-blank: Display the question with blank, then show choices
+        const fillblankContainer = document.createElement('div');
+        fillblankContainer.className = 'fillblank-container mb-4';
+        
+        // Parse question content to highlight the blank
+        const content = question.content;
+        const blankMarker = '____';
+        
+        if (content.includes(blankMarker)) {
+            // Split by blank marker and create highlighted display
+            const parts = content.split(blankMarker);
+            const displayText = document.createElement('div');
+            displayText.className = 'fillblank-text mb-3';
+            
+            let htmlContent = '';
+            for (let i = 0; i < parts.length; i++) {
+                htmlContent += `<span class="text-part">${parts[i]}</span>`;
+                if (i < parts.length - 1) {
+                    htmlContent += '<span class="blank-marker" id="blankMarker">____</span>';
+                }
+            }
+            
+            displayText.innerHTML = htmlContent;
+            fillblankContainer.appendChild(displayText);
+        } else {
+            // No blank marker found, just display the question
+            const displayText = document.createElement('div');
+            displayText.className = 'fillblank-text mb-3';
+            displayText.textContent = content;
+            fillblankContainer.appendChild(displayText);
+        }
+        
+        // Add instruction text
+        const instruction = document.createElement('div');
+        instruction.className = 'fillblank-instruction mb-2';
+        instruction.textContent = 'Välj rätt ord som passar i luckan:';
+        fillblankContainer.appendChild(instruction);
+        
+        // Shuffle choices
+        const choicesToShow = [...question.choices].sort(() => Math.random() - 0.5);
+        
+        // Create choice buttons
+        const choicesContainer = document.createElement('div');
+        choicesContainer.className = 'list-group';
+        
+        choicesToShow.forEach(ch => {
+            const btn = document.createElement('button');
+            btn.className = 'btn answer-btn btn-outline-light w-100 text-start fillblank-choice';
+            btn.dataset.choiceId = ch.id;
+            btn.dataset.choiceText = ch.content;
+            btn.innerHTML = `<div>${ch.content}</div>`;
+            btn.addEventListener('click', () => {
+                Array.from(choicesContainer.children).forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Update the blank marker with selected text
+                const blankMarker = document.getElementById('blankMarker');
+                if (blankMarker) {
+                    blankMarker.textContent = ch.content;
+                    blankMarker.classList.add('filled');
+                }
+            });
+            choicesContainer.appendChild(btn);
+        });
+        
+        fillblankContainer.appendChild(choicesContainer);
+        answerArea.appendChild(fillblankContainer);
     } else if (question.type === 'ordering') {
         const list = document.createElement('div');
         list.id = 'orderingList';
@@ -1461,7 +1623,11 @@ async function confirmAnswer() {
     } else if (question.type === 'truefalse') {
         const selected = answerArea.querySelector('button.active');
         if (!selected) { alert('Välj ett svar först'); return; }
-        answerObj = { choice_id: selected.dataset.choiceId };
+        answerObj = { choice_id: parseInt(selected.dataset.choiceId, 10) };
+    } else if (question.type === 'fillblank') {
+        const selected = answerArea.querySelector('button.active');
+        if (!selected) { alert('Välj ett svar först'); return; }
+        answerObj = { choice_id: parseInt(selected.dataset.choiceId, 10) };
     } else if (question.type === 'ordering') {
         const list = document.getElementById('orderingList');
         if (!list) { alert('Ordna elementen först'); return; }
