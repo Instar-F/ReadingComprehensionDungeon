@@ -171,13 +171,13 @@ $questionTypeNames = [
                     <div class="col-4 col-md-2">
                         <div class="stat-mini">
                             <div class="stat-mini-value"><?= $stats['diamonds_earned'] ?></div>
-                            <div class="stat-mini-label">💎 Diamanter</div>
+                            <div class="stat-mini-label">Diamanter</div>
                         </div>
                     </div>
                     <div class="col-4 col-md-2">
                         <div class="stat-mini">
                             <div class="stat-mini-value"><?= $stats['emeralds_earned'] ?></div>
-                            <div class="stat-mini-label">💚 Smaragder</div>
+                            <div class="stat-mini-label">Smaragder</div>
                         </div>
                     </div>
                     <div class="col-4 col-md-2">
@@ -191,7 +191,7 @@ $questionTypeNames = [
         </div>
     </div>
 
-    <div class="row mt-4">
+    <div class="row mt-4 profile-equal">
         <!-- Left Column -->
         <div class="col-12 col-lg-6 ProfileColumn">
             <!-- Storyline Progress -->
@@ -200,6 +200,7 @@ $questionTypeNames = [
                 <div class="section-title">
                     <i class="fas fa-book-open"></i> Storyline Framsteg
                 </div>
+                <div class="storyline-list">
                 <?php foreach ($storylineProgress as $sl): 
                     $completion = $sl['total_exercises'] > 0 ? ($sl['completed_exercises'] / $sl['total_exercises']) * 100 : 0;
                 ?>
@@ -222,6 +223,7 @@ $questionTypeNames = [
                     </div>
                 </div>
                 <?php endforeach; ?>
+                </div>
             </div>
             <?php endif; ?>
 

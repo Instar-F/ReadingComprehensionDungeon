@@ -28,12 +28,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception("Titel kan inte vara tom");
                     }
                     
-                    // Build metadata
-                    $metadata = [];
-                    if (isset($_POST['use_exp_percentage']) && $_POST['use_exp_percentage'] == '1') {
-                        $metadata['use_exp_percentage'] = true;
-                    }
-                    $metadataJson = !empty($metadata) ? json_encode($metadata) : null;
+                    // EXP-percentage is default now; do not store per-exercise flag
+                    $metadataJson = json_encode((object)[]);
                     
                     $stmt = $pdo->prepare("
                         INSERT INTO exercises (title, difficulty, min_level, storyline_id, metadata, created_at) 
@@ -42,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([
                         trim($_POST['title']),
                         $_POST['difficulty'],
-                        $_POST['min_level'],
+                        (int)($_POST['min_level'] ?? 1),
                         !empty($_POST['storyline_id']) ? $_POST['storyline_id'] : null,
                         $metadataJson
                     ]);
@@ -55,12 +51,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception("Titel kan inte vara tom");
                     }
                     
-                    // Build metadata
-                    $metadata = [];
-                    if (isset($_POST['use_exp_percentage']) && $_POST['use_exp_percentage'] == '1') {
-                        $metadata['use_exp_percentage'] = true;
-                    }
-                    $metadataJson = !empty($metadata) ? json_encode($metadata) : null;
+                    // EXP-percentage is default now; do not modify per-exercise metadata here
+                    $metadataJson = json_encode((object)[]);
                     
                     $stmt = $pdo->prepare("
                         UPDATE exercises 
@@ -70,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([
                         trim($_POST['title']),
                         $_POST['difficulty'],
-                        $_POST['min_level'],
+                        (int)($_POST['min_level'] ?? 1),
                         !empty($_POST['storyline_id']) ? $_POST['storyline_id'] : null,
                         $metadataJson,
                         $_POST['exercise_id']
@@ -153,23 +145,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $type = $_POST['type'];
                     
                     if ($type === 'mcq') {
-                        // MCQ - use user-provided choices
-                        if (empty($_POST['choices']) || !isset($_POST['correct_choice'])) {
-                            $pdo->prepare("DELETE FROM questions WHERE id = ?")->execute([$questionId]);
-                            throw new Exception("MCQ måste ha minst 2 alternativ och ett rätt svar!");
-                        }
+                        // MCQ - use user-provided choices (allow multiple correct answers)
                         
                         $choiceStmt = $pdo->prepare("
                             INSERT INTO question_choices (question_id, content, is_correct, pos) 
                             VALUES (?, ?, ?, ?)
                         ");
                         $pos = 0;
-                        foreach ($_POST['choices'] as $idx => $choice) {
-                            if (!empty(trim($choice))) {
-                                $isCorrect = (isset($_POST['correct_choice']) && $_POST['correct_choice'] == $idx) ? 1 : 0;
-                                $choiceStmt->execute([$questionId, trim($choice), $isCorrect, $pos]);
-                                $pos++;
-                            }
+                        $rawChoices = $_POST['choices'] ?? [];
+                        $correctIndexes = array_map('strval', $_POST['correct_choices'] ?? []);
+                        $nonEmpty = 0;
+                        foreach ($rawChoices as $idx => $choice) {
+                            $choice = trim($choice);
+                            if ($choice === '') continue;
+                            $isCorrect = in_array((string)$idx, $correctIndexes, true) ? 1 : 0;
+                            $choiceStmt->execute([$questionId, $choice, $isCorrect, $pos]);
+                            $pos++;
+                            $nonEmpty++;
+                        }
+
+                        if ($nonEmpty < 2) {
+                            $pdo->prepare("DELETE FROM questions WHERE id = ?")->execute([$questionId]);
+                            throw new Exception("MCQ måste ha minst 2 alternativa svar.");
+                        }
+                        // Ensure at least one correct answer
+                        $correctCheck = $pdo->prepare("SELECT COUNT(*) AS c FROM question_choices WHERE question_id=? AND is_correct=1");
+                        $correctCheck->execute([$questionId]);
+                        if ((int)$correctCheck->fetch(PDO::FETCH_ASSOC)['c'] === 0) {
+                            // default to first choice if none selected
+                            $firstStmt = $pdo->prepare("UPDATE question_choices SET is_correct=1 WHERE question_id=? ORDER BY pos ASC LIMIT 1");
+                            $firstStmt->execute([$questionId]);
                         }
                     } 
                     elseif ($type === 'truefalse') {
@@ -201,23 +206,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ]);
                     }
                     elseif ($type === 'fillblank') {
-                        // Fill-blank - use user-provided choices
-                        if (empty($_POST['fb_choices']) || !isset($_POST['fb_correct'])) {
-                            $pdo->prepare("DELETE FROM questions WHERE id = ?")->execute([$questionId]);
-                            throw new Exception("Fyll-i måste ha minst 2 alternativ och ett rätt svar!");
-                        }
+                        // Fill-blank - allow multiple correct answers (validation performed after inserting non-empty choices)
                         
                         $choiceStmt = $pdo->prepare("
                             INSERT INTO question_choices (question_id, content, is_correct, pos) 
                             VALUES (?, ?, ?, ?)
                         ");
-                        $pos = 0;
-                        foreach ($_POST['fb_choices'] as $idx => $choice) {
-                            if (!empty(trim($choice))) {
-                                $isCorrect = (isset($_POST['fb_correct']) && $_POST['fb_correct'] == $idx) ? 1 : 0;
-                                $choiceStmt->execute([$questionId, trim($choice), $isCorrect, $pos]);
-                                $pos++;
-                            }
+                        $pos = 0; $nonEmpty = 0;
+                        $rawChoices = $_POST['fb_choices'] ?? [];
+                        $correctIndexes = array_map('strval', $_POST['fb_corrects'] ?? []);
+                        foreach ($rawChoices as $idx => $choice) {
+                            $choice = trim($choice);
+                            if ($choice === '') continue;
+                            $isCorrect = in_array((string)$idx, $correctIndexes, true) ? 1 : 0;
+                            $choiceStmt->execute([$questionId, $choice, $isCorrect, $pos]);
+                            $pos++; $nonEmpty++;
+                        }
+
+                        if ($nonEmpty < 2) {
+                            $pdo->prepare("DELETE FROM questions WHERE id = ?")->execute([$questionId]);
+                            throw new Exception("Fyll-i måste ha minst 2 alternativ.");
+                        }
+                        // Ensure at least one correct option
+                        $correctCheck = $pdo->prepare("SELECT COUNT(*) AS c FROM question_choices WHERE question_id=? AND is_correct=1");
+                        $correctCheck->execute([$questionId]);
+                        if ((int)$correctCheck->fetch(PDO::FETCH_ASSOC)['c'] === 0) {
+                            $firstStmt = $pdo->prepare("UPDATE question_choices SET is_correct=1 WHERE question_id=? ORDER BY pos ASC LIMIT 1");
+                            $firstStmt->execute([$questionId]);
                         }
                     }
                     elseif ($type === 'ordering') {
@@ -269,6 +284,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([$_POST['question_id']]);
                     $message = "Fråga raderad!";
                     $messageType = "success";
+                    break;
+
+                case 'run_sql':
+                    // Run arbitrary SQL supplied by admin. Confirmation checkbox required.
+                    $sql = trim($_POST['sql'] ?? '');
+                    if ($sql === '') {
+                        throw new Exception("Ingen SQL angiven");
+                    }
+                    if (!isset($_POST['confirm_execute']) || $_POST['confirm_execute'] != '1') {
+                        throw new Exception("Bekräfta att du vill köra SQL genom att kryssa i bekräftelsen.");
+                    }
+                    // Execute statements in a transaction
+                    $pdo->beginTransaction();
+                    try {
+                        $stmts = array_filter(array_map('trim', explode(';', $sql)));
+                        $count = 0;
+                        foreach ($stmts as $s) {
+                            if ($s === '') continue;
+                            $pdo->exec($s);
+                            $count++;
+                        }
+                        $pdo->commit();
+                        $message = "SQL-körning slutförd. Antal statements: $count";
+                        $messageType = "success";
+                    } catch (Exception $e) {
+                        if ($pdo->inTransaction()) $pdo->rollBack();
+                        throw $e;
+                    }
                     break;
 
                 case 'add_passage':
@@ -584,6 +627,7 @@ table tr:hover { background: #2a2a2a; }
         <button class="tab <?= $activeTab === 'storylines' ? 'active' : '' ?>" onclick="showTab('storylines')">Storylines (<?= count($storylines) ?>)</button>
         <button class="tab <?= $activeTab === 'questions' ? 'active' : '' ?>" onclick="showTab('questions')">Frågor (<?= count($questions) ?>)</button>
         <button class="tab <?= $activeTab === 'passages' ? 'active' : '' ?>" onclick="showTab('passages')">Textpassager</button>
+        <button class="tab <?= $activeTab === 'tools' ? 'active' : '' ?>" onclick="showTab('tools')">Verktyg</button>
     </div>
 
     <!-- EXERCISES TAB -->
@@ -598,6 +642,7 @@ table tr:hover { background: #2a2a2a; }
                         <div class="form-group">
                             <label>Titel *</label>
                             <input type="text" name="title" class="form-control" required>
+                            <small style="color:#aaa;display:block;margin-top:6px;">Kort titel, syns i listor — beskrivande men inte för lång.</small>
                         </div>
                         <div class="form-group">
                             <label>Svårighetsgrad *</label>
@@ -608,8 +653,9 @@ table tr:hover { background: #2a2a2a; }
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>Minimum Nivå *</label>
-                            <input type="number" name="min_level" class="form-control" value="1" min="1" required>
+                            <label>Minimum Nivå</label>
+                            <input type="number" name="min_level" class="form-control" value="1" min="1">
+                            <small style="color:#aaa;display:block;margin-top:6px;">Valfritt — lämna tomt för standard (1).</small>
                         </div>
                         <div class="form-group">
                             <label>Storyline</label>
@@ -621,13 +667,7 @@ table tr:hover { background: #2a2a2a; }
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" name="use_exp_percentage" value="1">
-                                <span>Använd EXP-procent för sorteringsuppgifter</span>
-                            </label>
-                            <small style="display: block; margin-top: 5px; color: #aaa;">
-                                För övningar med ordningsfrågor: använd partiell poäng istället för allt-eller-inget
-                            </small>
+                            <small style="display: block; margin-top: 5px; color: #aaa;">EXP-procent används automatiskt för ordningsuppgifter (ingen inställning krävs).</small>
                         </div>
                         <button type="submit" class="btn btn-warning">Skapa Övning</button>
                     </form>
@@ -654,12 +694,7 @@ table tr:hover { background: #2a2a2a; }
                                 <td><?= $ex['id'] ?></td>
                                 <td>
                                     <?= htmlspecialchars($ex['title']) ?>
-                                    <?php 
-                                    $meta = json_decode($ex['metadata'] ?? '{}', true);
-                                    if (isset($meta['use_exp_percentage']) && $meta['use_exp_percentage']): 
-                                    ?>
-                                        <span style="color: #ffc107; font-size: 11px;">📊 EXP%</span>
-                                    <?php endif; ?>
+
                                 </td>
                                 <td><span class="badge badge-<?= $ex['difficulty'] ?>"><?= ucfirst($ex['difficulty']) ?></span></td>
                                 <td><?= $ex['min_level'] ?></td>
@@ -758,6 +793,7 @@ table tr:hover { background: #2a2a2a; }
             <div class="col-4">
                 <div class="card">
                     <h3>Lägg till Fråga</h3>
+                    <div class="small" style="color:#aaa;margin-bottom:10px;">Minimalt: välj övning, typ och skriv en kort frågetext. Poäng och detaljfält kan lämnas med standardvärden.</div>
                     <form method="post" id="addQuestionForm">
                         <input type="hidden" name="action" value="add_question">
                         <input type="hidden" name="active_tab" value="questions">
@@ -791,23 +827,24 @@ table tr:hover { background: #2a2a2a; }
                         <!-- MCQ Choices -->
                         <div id="mcqFields" class="question-type-fields active">
                             <label style="font-weight: bold; margin-bottom: 10px; display: block;">Svarsalternativ *</label>
+                            <div class="small" style="margin-bottom:8px;color:#aaa;">Minst två alternativ krävs. Du kan markera EN ELLER FLERA som korrekta genom att bocka i rutorna till höger.</div>
                             <div id="choicesList">
                                 <div class="input-group">
                                     <input type="text" name="choices[]" class="form-control mcq-field" placeholder="Alternativ 1">
                                     <div class="input-group-append">
-                                        <label style="margin: 0;"><input type="radio" name="correct_choice" class="mcq-radio" value="0"> Rätt</label>
+                                        <label style="margin: 0;"><input type="checkbox" name="correct_choices[]" class="mcq-checkbox" value="0"> Rätt</label>
                                     </div>
                                 </div>
                                 <div class="input-group">
                                     <input type="text" name="choices[]" class="form-control mcq-field" placeholder="Alternativ 2">
                                     <div class="input-group-append">
-                                        <label style="margin: 0;"><input type="radio" name="correct_choice" class="mcq-radio" value="1"> Rätt</label>
+                                        <label style="margin: 0;"><input type="checkbox" name="correct_choices[]" class="mcq-checkbox" value="1"> Rätt</label>
                                     </div>
                                 </div>
                             </div>
                             <button type="button" class="btn btn-secondary btn-sm" onclick="addChoice()">+ Lägg till alternativ</button>
                             <div class="note">
-                                <strong>OBS:</strong> Välj vilket alternativ som är rätt genom att klicka på "Rätt"-knappen.
+                                <strong>Tips:</strong> Om du vill ha flera korrekta svar så bockar du i flera rutor. Lämna inte alla rutor tomma — markera minst ett korrekt svar.
                             </div>
                         </div>
                         
@@ -831,30 +868,32 @@ table tr:hover { background: #2a2a2a; }
                         
                         <!-- Fill-blank Choices -->
                         <div id="fillBlankFields" class="question-type-fields">
-                            <label style="font-weight: bold; margin-bottom: 10px; display: block;">Möjliga svar ("____") fyra för blank *</label>
+                            <label style="font-weight: bold; margin-bottom: 10px; display: block;">Möjliga svar (fyll i luckan) *</label>
+                            <div class="small" style="margin-bottom:8px;color:#aaa;">Minst två alternativ krävs. Markera ett eller flera korrekta svar.</div>
                             <div id="fillBlankList">
                                 <div class="input-group">
                                     <input type="text" name="fb_choices[]" class="form-control fb-field" placeholder="Alternativ 1 (rätt svar)">
                                     <div class="input-group-append">
-                                        <label style="margin: 0;"><input type="radio" name="fb_correct" class="fb-radio" value="0"> Rätt</label>
+                                        <label style="margin: 0;"><input type="checkbox" name="fb_corrects[]" class="fb-checkbox" value="0"> Rätt</label>
                                     </div>
                                 </div>
                                 <div class="input-group">
                                     <input type="text" name="fb_choices[]" class="form-control fb-field" placeholder="Alternativ 2">
                                     <div class="input-group-append">
-                                        <label style="margin: 0;"><input type="radio" name="fb_correct" class="fb-radio" value="1"> Rätt</label>
+                                        <label style="margin: 0;"><input type="checkbox" name="fb_corrects[]" class="fb-checkbox" value="1"> Rätt</label>
                                     </div>
                                 </div>
                             </div>
                             <button type="button" class="btn btn-secondary btn-sm" onclick="addFillBlankChoice()">+ Lägg till alternativ</button>
                             <div class="note">
-                                <strong>OBS:</strong> Lägg till alla möjliga svar som användaren kan välja mellan. Markera det rätta svaret.
+                                <strong>Tips:</strong> Ge korta svarsalternativ och markera alla giltiga varianter.
                             </div>
                         </div>
                         
                         <!-- Ordering Items -->
                         <div id="orderingFields" class="question-type-fields">
                             <label style="font-weight: bold; margin-bottom: 10px; display: block;">Ordningsalternativ (i rätt ordning) *</label>
+                            <div class="small" style="margin-bottom:8px;color:#aaa;">Skriv alternativen i rätt ordning. Minst 2 steg krävs.</div>
                             <div id="orderingList">
                                 <div class="input-group">
                                     <span style="min-width: 30px;">1.</span>
@@ -864,14 +903,10 @@ table tr:hover { background: #2a2a2a; }
                                     <span style="min-width: 30px;">2.</span>
                                     <input type="text" name="ordering_items[]" class="form-control ordering-field" placeholder="Andra steget">
                                 </div>
-                                <div class="input-group">
-                                    <span style="min-width: 30px;">3.</span>
-                                    <input type="text" name="ordering_items[]" class="form-control ordering-field" placeholder="Tredje steget">
-                                </div>
                             </div>
                             <button type="button" class="btn btn-secondary btn-sm" onclick="addOrderingItem()">+ Lägg till steg</button>
                             <div class="note">
-                                <strong>OBS:</strong> Skriv alternativen i den ordning de ska vara. Användaren får dem i slumpmässig ordning.
+                                <strong>Tips:</strong> Du kan lägga till så många steg som behövs. Användaren ser dem slumpmässigt när de svarar.
                             </div>
                         </div>
                         
@@ -951,6 +986,26 @@ table tr:hover { background: #2a2a2a; }
             </form>
         </div>
     </div>
+
+    <!-- TOOLS TAB -->
+    <div id="tools" class="tab-content <?= $activeTab === 'tools' ? 'active' : '' ?>">
+        <div class="card">
+            <h3>Verktyg — Kör SQL</h3>
+            <p class="small" style="color:#aaa;">Klistra in SQL som din AI genererat. Kör endast om du förstår vad frågorna gör. En bekräftelse krävs.</p>
+            <form method="post">
+                <input type="hidden" name="action" value="run_sql">
+                <input type="hidden" name="active_tab" value="tools">
+                <div class="form-group">
+                    <label>SQL</label>
+                    <textarea name="sql" class="form-control" rows="8" placeholder="Skriv eller klistra in SQL här..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label"><input type="checkbox" name="confirm_execute" value="1"> Jag förstår att detta körs direkt mot databasen</label>
+                </div>
+                <button type="submit" class="btn btn-danger">Kör SQL</button>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- Edit Exercise Modal -->
@@ -978,7 +1033,8 @@ table tr:hover { background: #2a2a2a; }
             </div>
             <div class="form-group">
                 <label>Minimum Nivå *</label>
-                <input type="number" name="min_level" id="edit_ex_min_level" class="form-control" min="1" required>
+                <input type="number" name="min_level" id="edit_ex_min_level" class="form-control" min="1">
+            <small style="color:#aaa;display:block;margin-top:6px;">Valfritt — lämna tomt för standard (1).</small>
             </div>
             <div class="form-group">
                 <label>Storyline</label>
@@ -990,10 +1046,7 @@ table tr:hover { background: #2a2a2a; }
                 </select>
             </div>
             <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" name="use_exp_percentage" id="edit_ex_exp" value="1">
-                    <span>Använd EXP-procent för sorteringsuppgifter</span>
-                </label>
+                <small style="color:#aaa;display:block;margin-top:6px;">EXP-procent är aktiverat globalt och behöver inte ändras per övning.</small>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeModal('editExerciseModal')">Avbryt</button>
@@ -1066,7 +1119,7 @@ table tr:hover { background: #2a2a2a; }
                 <label>Poäng *</label>
                 <input type="number" name="points" id="edit_q_points" class="form-control" min="1" required>
             </div>
-            <p style="font-size: 13px; color: #aaa;">OBS: För att redigera svarsalternativ/ordning, radera frågan och skapa en ny.</p>
+            <p style="font-size: 13px; color: #aaa;">OBS: För att redigera svarsalternativ/ordning, radera frågan och skapa en ny — eller använd fliken <strong>Verktyg</strong> och kör SQL för att uppdatera detaljer (för avancerade ändringar).</p>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeModal('editQuestionModal')">Avbryt</button>
                 <button type="submit" class="btn btn-warning">Spara ändringar</button>
@@ -1101,7 +1154,7 @@ function toggleQuestionTypes() {
     });
     
     // Remove all required attributes from hidden fields
-    document.querySelectorAll('.mcq-field, .mcq-radio, .tf-radio, .fb-field, .fb-radio, .ordering-field').forEach(el => {
+    document.querySelectorAll('.mcq-field, .mcq-checkbox, .tf-radio, .fb-field, .fb-checkbox, .ordering-field').forEach(el => {
         el.removeAttribute('required');
     });
     
@@ -1109,14 +1162,14 @@ function toggleQuestionTypes() {
     if (type === 'mcq') {
         document.getElementById('mcqFields').classList.add('active');
         document.querySelectorAll('.mcq-field').forEach(el => el.setAttribute('required', 'required'));
-        document.querySelectorAll('.mcq-radio')[0].setAttribute('required', 'required');
+        // checkboxes don't support required, we'll validate on submit
     } else if (type === 'truefalse') {
         document.getElementById('trueFalseFields').classList.add('active');
         document.querySelectorAll('.tf-radio')[0].setAttribute('required', 'required');
     } else if (type === 'fillblank') {
         document.getElementById('fillBlankFields').classList.add('active');
         document.querySelectorAll('.fb-field').forEach(el => el.setAttribute('required', 'required'));
-        document.querySelectorAll('.fb-radio')[0].setAttribute('required', 'required');
+        // checkboxes validated on submit
     } else if (type === 'ordering') {
         document.getElementById('orderingFields').classList.add('active');
         document.querySelectorAll('.ordering-field').forEach(el => el.setAttribute('required', 'required'));
@@ -1130,7 +1183,7 @@ function addChoice() {
     div.innerHTML = `
         <input type="text" name="choices[]" class="form-control mcq-field" placeholder="Alternativ ${choiceCount + 1}" required>
         <div class="input-group-append">
-            <label style="margin: 0;"><input type="radio" name="correct_choice" class="mcq-radio" value="${choiceCount}"> Rätt</label>
+            <label style="margin: 0;"><input type="checkbox" name="correct_choices[]" class="mcq-checkbox" value="${choiceCount}"> Rätt</label>
         </div>
     `;
     list.appendChild(div);
@@ -1144,7 +1197,7 @@ function addFillBlankChoice() {
     div.innerHTML = `
         <input type="text" name="fb_choices[]" class="form-control fb-field" placeholder="Alternativ ${fillBlankCount + 1}" required>
         <div class="input-group-append">
-            <label style="margin: 0;"><input type="radio" name="fb_correct" class="fb-radio" value="${fillBlankCount}"> Rätt</label>
+            <label style="margin: 0;"><input type="checkbox" name="fb_corrects[]" class="fb-checkbox" value="${fillBlankCount}"> Rätt</label>
         </div>
     `;
     list.appendChild(div);
@@ -1171,12 +1224,7 @@ function editExercise(data) {
     document.getElementById('edit_ex_storyline').value = data.storyline_id || '';
     
     // Handle metadata
-    try {
-        const metadata = JSON.parse(data.metadata || '{}');
-        document.getElementById('edit_ex_exp').checked = metadata.use_exp_percentage || false;
-    } catch(e) {
-        document.getElementById('edit_ex_exp').checked = false;
-    }
+    // Metadata may contain historical flags, but EXP-percentage is handled globally now.
     
     document.getElementById('editExerciseModal').classList.add('show');
 }
@@ -1221,6 +1269,25 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 toggleQuestionTypes();
+
+// Validate add question form to enforce minimal sensible rules
+document.getElementById('addQuestionForm').addEventListener('submit', function(e) {
+    const type = document.getElementById('questionType').value;
+    if (type === 'mcq') {
+        const choices = Array.from(document.querySelectorAll('.mcq-field')).map(i => i.value.trim()).filter(Boolean);
+        const correct = Array.from(document.querySelectorAll('input[name="correct_choices[]"]:checked'));
+        if (choices.length < 2) { e.preventDefault(); alert('MCQ måste ha minst 2 alternativ.'); return false; }
+        if (correct.length < 1) { e.preventDefault(); alert('Markera minst ett korrekt alternativ.'); return false; }
+    } else if (type === 'fillblank') {
+        const choices = Array.from(document.querySelectorAll('.fb-field')).map(i => i.value.trim()).filter(Boolean);
+        const correct = Array.from(document.querySelectorAll('input[name="fb_corrects[]"]:checked'));
+        if (choices.length < 2) { e.preventDefault(); alert('Fyll-i måste ha minst 2 alternativ.'); return false; }
+        if (correct.length < 1) { e.preventDefault(); alert('Markera minst ett korrekt alternativ.'); return false; }
+    } else if (type === 'ordering') {
+        const items = Array.from(document.querySelectorAll('.ordering-field')).map(i => i.value.trim()).filter(Boolean);
+        if (items.length < 2) { e.preventDefault(); alert('Ordningsfråga måste ha minst 2 steg.'); return false; }
+    }
+});
 </script>
 </body>
 </html>

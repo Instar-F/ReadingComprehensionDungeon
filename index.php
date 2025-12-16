@@ -30,8 +30,6 @@
           </p>
         <?php endif; ?>
 
-        <hr>
-        <p class="small text-muted">Admin: <a href="admin/index.php">hantera övningar</a></p>
       </div>
     </div>
   </div>

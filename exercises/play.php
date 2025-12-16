@@ -447,10 +447,9 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             // Calculate percentage based on correct vs total questions
             $percentage = ($totalQuestions > 0) ? ($correctCount / $totalQuestions) * 100 : 0;
             $EXPpercentage = ($totalPossiblePoints > 0) ? ($totalPoints / $totalPossiblePoints) * 100 : 0;
-            // Optional: base reward tiers on EXPpercentage instead of correct-count percentage
-            $metadata = json_decode($exercise['metadata'] ?? '{}', true);
-            $useExpPercentage = isset($metadata['use_exp_percentage']) ? (bool)$metadata['use_exp_percentage'] : false;
-            $usedPercentage = $useExpPercentage ? $EXPpercentage : $percentage;
+            // Use EXP percentage as the official percentage for rewards/display.
+            $useExpPercentage = true; // EXP-based percentage is now the system default
+            $usedPercentage = $EXPpercentage;
 
             // Determine reward based on percentage
             $reward = 'coal';
@@ -546,7 +545,7 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 'reward' => $reward,
                 'percentage' => round($usedPercentage, 1),
                 'EXPpercentage' => round($EXPpercentage, 1),
-                'percentage_type' => $useExpPercentage ? 'exp' : 'correct',
+                'percentage_type' => 'exp',
                 'answers' => $answers,
                 'new_level' => $newLevel,
                 'leveled_up' => $leveledUp,
@@ -1053,12 +1052,15 @@ function renderQuestion() {
     const question = questions[currentQuestionIndex];
     questionCounter.textContent = `Fråga ${currentQuestionIndex + 1} av ${questions.length}`;
     
-    // For fillblank, we'll show the question in a special way, so hide the default display
-    if (question.type === 'fillblank') {
-        questionContent.style.display = 'none';
-    } else {
-        questionContent.style.display = 'block';
+    // Ensure questionContent visible; always use the same spacing class
+    questionContent.style.display = 'block';
+    questionContent.className = 'mb-4';
+    if (question.type !== 'fillblank') {
         questionContent.textContent = question.content;
+    } else {
+        // will be populated in the fillblank branch
+        questionContent.innerHTML = '';
+        questionContent.classList.add('fillblank-text');
     }
     
     answerArea.innerHTML = '';
@@ -1098,73 +1100,36 @@ function renderQuestion() {
         });
         answerArea.appendChild(container);
     } else if (question.type === 'fillblank') {
-        // Fill-in-the-blank: Display the question with blank, then show choices
-        const fillblankContainer = document.createElement('div');
-        fillblankContainer.className = 'fillblank-container mb-4';
-        
-        // Parse question content to highlight the blank
-        const content = question.content;
+        // Fill-in-the-blank: render blank into #questionContent and show choices with same layout as MCQ/TrueFalse
+        const content = question.content || '';
         const blankMarker = '____';
-        
+        let htmlContent = '';
         if (content.includes(blankMarker)) {
-            // Split by blank marker and create highlighted display
             const parts = content.split(blankMarker);
-            const displayText = document.createElement('div');
-            displayText.className = 'fillblank-text mb-3';
-            
-            let htmlContent = '';
             for (let i = 0; i < parts.length; i++) {
                 htmlContent += `<span class="text-part">${parts[i]}</span>`;
-                if (i < parts.length - 1) {
-                    htmlContent += '<span class="blank-marker" id="blankMarker">____</span>';
-                }
+                if (i < parts.length - 1) htmlContent += '<span class="blank-marker" id="blankMarker">____</span>';
             }
-            
-            displayText.innerHTML = htmlContent;
-            fillblankContainer.appendChild(displayText);
         } else {
-            // No blank marker found, just display the question
-            const displayText = document.createElement('div');
-            displayText.className = 'fillblank-text mb-3';
-            displayText.textContent = content;
-            fillblankContainer.appendChild(displayText);
+            htmlContent = `<span class="text-part">${content}</span>`;
         }
-        
-        // Add instruction text
-        const instruction = document.createElement('div');
-        instruction.className = 'fillblank-instruction mb-2';
-        instruction.textContent = 'Välj rätt ord som passar i luckan:';
-        fillblankContainer.appendChild(instruction);
-        
-        // Shuffle choices
+        htmlContent += `<div class="small mt-2 fillblank-instruction">Välj rätt ord som passar i luckan:</div>`;
+        questionContent.innerHTML = htmlContent;
+
+        // Render choices using the same list-group + button pattern as MCQ/TrueFalse
+        const container = document.createElement('div');
+        container.className = 'list-group';
         const choicesToShow = [...question.choices].sort(() => Math.random() - 0.5);
-        
-        // Create choice buttons
-        const choicesContainer = document.createElement('div');
-        choicesContainer.className = 'list-group';
-        
         choicesToShow.forEach(ch => {
             const btn = document.createElement('button');
-            btn.className = 'btn answer-btn btn-outline-light w-100 text-start fillblank-choice';
+            btn.className = 'btn answer-btn btn-outline-light w-100 text-start';
             btn.dataset.choiceId = ch.id;
             btn.dataset.choiceText = ch.content;
             btn.innerHTML = `<div>${ch.content}</div>`;
-            btn.addEventListener('click', () => {
-                Array.from(choicesContainer.children).forEach(c => c.classList.remove('active'));
-                btn.classList.add('active');
-                
-                // Update the blank marker with selected text
-                const blankMarker = document.getElementById('blankMarker');
-                if (blankMarker) {
-                    blankMarker.textContent = ch.content;
-                    blankMarker.classList.add('filled');
-                }
-            });
-            choicesContainer.appendChild(btn);
+            btn.addEventListener('click', () => { selectChoice(btn); const bm = document.getElementById('blankMarker'); if (bm) { bm.textContent = ch.content; bm.classList.add('filled'); } });
+            container.appendChild(btn);
         });
-        
-        fillblankContainer.appendChild(choicesContainer);
-        answerArea.appendChild(fillblankContainer);
+        answerArea.appendChild(container);
     } else if (question.type === 'ordering') {
         const list = document.createElement('div');
         list.id = 'orderingList';

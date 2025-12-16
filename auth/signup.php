@@ -40,9 +40,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body class="sky-bg">
   <div class="centercontainer container py-5">
-    <div class="card mx-auto" style="min-width:50vw; max-height:750px;">
+    <div class="card auth-card mx-auto">
       <div class="card-body">
-        <h2 class="h5">Registrera</h2>
+        <div class="text-center mb-3">
+          <h1 class="gametext mb-1">RC Dungeon</h1>
+          <div class="auth-subtitle">Skapa ett konto</div>
+        </div>
         <?php if ($errors): ?>
           <div class="alert alert-danger">
             <ul class="mb-0">
@@ -55,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <form method="post">
           <div class="mb-2">
             <label class="form-label">Namn</label>
-            <input name="name" class="form-control" value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>">
+            <input name="name" class="form-control" value="<?php echo htmlspecialchars($_POST['name'] ?? ''); ?>" autofocus>
           </div>
           <div class="mb-2">
             <label class="form-label">E-post</label>
@@ -70,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <input name="password2" type="password" class="form-control">
           </div>
           <div class="d-flex justify-content-between align-items-center">
-            <a href="signin.php">Redan registrerad?</a>
-            <button class="btn btn-primary">Skapa konto</button>
+            <a href="signin.php" class="auth-link">Redan registrerad?</a>
+            <button class="btn btn-warning">Skapa konto</button>
           </div>
         </form>
       </div>

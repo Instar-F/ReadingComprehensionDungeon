@@ -33,26 +33,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body class="sky-bg">
   <div class="centercontainer container py-5">
-    <div class="card mx-auto" style="min-width:50vw; max-height:750px;">
+    <div class="card auth-card mx-auto">
       <div class="card-body">
-        <h2 class="h5">Logga in</h2>
+        <div class="text-center mb-3">
+          <h1 class="gametext mb-1">RC Dungeon</h1>
+          <div class="auth-subtitle">Logga in för att fortsätta</div>
+        </div>
         <?php if ($errors): ?>
           <div class="alert alert-danger">
             <?php echo htmlspecialchars(implode('<br>', $errors)); ?>
           </div>
         <?php endif; ?>
         <form method="post">
-          <div class="mb-2">
+          <div class="mb-3">
             <label class="form-label">E-post</label>
-            <input name="email" type="email" class="form-control" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>">
+            <input name="email" type="email" class="form-control" value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" autofocus>
           </div>
           <div class="mb-3">
             <label class="form-label">Lösenord</label>
             <input name="password" type="password" class="form-control">
           </div>
           <div class="d-flex justify-content-between align-items-center">
-            <a href="signup.php">Skapa konto</a>
-            <button class="btn btn-primary">Logga in</button>
+            <a href="signup.php" class="auth-link">Skapa konto</a>
+            <button class="btn btn-warning">Logga in</button>
           </div>
         </form>
       </div>
