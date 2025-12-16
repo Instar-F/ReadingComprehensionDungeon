@@ -122,12 +122,6 @@ $questionTypeNames = [
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body class="dirt-bg">
-<header style="position:relative;">
-    <div class="hero-top">
-      <div class="hero-avatar" title="Din hjälte"><?php echo strtoupper(substr($user['name'] ?? $user['email'],0,1)); ?></div>
-      <div class="hero-pill">XP <?php echo (int)$user['points']; ?> • Lv <?php echo (int)$user['level']; ?></div>
-    </div>
-</header>
 
 <main class="dirt-bg">
 <div class="container compact-profile py-4">
@@ -183,7 +177,7 @@ $questionTypeNames = [
                     <div class="col-4 col-md-2">
                         <div class="stat-mini">
                             <div class="stat-mini-value"><?= gmdate('H:i', $stats['total_time_spent']) ?></div>
-                            <div class="stat-mini-label">⏱️ Tid</div>
+                            <div class="stat-mini-label">⏱️ Timmar spenderat</div>
                         </div>
                     </div>
                 </div>
@@ -198,7 +192,7 @@ $questionTypeNames = [
             <?php if (!empty($storylineProgress)): ?>
             <div class="section-compact mb-4">
                 <div class="section-title">
-                    <i class="fas fa-book-open"></i> Storyline Framsteg
+                    <i class="fas gametext">Storyline Framsteg</i> 
                 </div>
                 <div class="storyline-list">
                 <?php foreach ($storylineProgress as $sl): 
@@ -229,9 +223,9 @@ $questionTypeNames = [
 
             <!-- Question Type Performance -->
             <?php if (!empty($questionStats)): ?>
-            <div class="section-compact">
+            <div class="section-compact mb-4">
                 <div class="section-title">
-                    <i class="fas fa-chart-bar"></i> Prestanda per Frågetyp
+                    <i class="fas gametext">Prestanda per Frågetyp</i>
                 </div>
                 <div class="row g-2">
                     <?php foreach ($questionStats as $qs): 
@@ -264,9 +258,9 @@ $questionTypeNames = [
         <!-- Right Column -->
         <div class="col-12 col-lg-6 ProfileColumn">
             <!-- Badges Section -->
-            <div class="section-compact badge-section">
+            <div class="section-compact mb-4 badge-section">
                 <div class="section-title">
-                    <i class="fas fa-trophy"></i> Utmärkelser
+                    <i class="fas gametext">Utmärkelser</i> 
                     <span style="margin-left: auto; font-size: 0.875rem; color: rgba(255, 193, 7, 0.8);">
                         <?= $earnedCount ?> / <?= $totalBadges ?> upplåsta
                     </span>

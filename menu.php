@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/config.php';
 if (!is_logged_in()) {
-    header('Location: auth/login.php'); exit;
+    header('Location: auth/signin.php'); exit;
 }
 $user = current_user($pdo);
 
@@ -20,26 +20,18 @@ $user = current_user($pdo);
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="dungeon-bg">
-  <header style="position:relative;">
-    <div class="hero-top">
-      <div class="hero-avatar" title="Din hjälte"><?php echo strtoupper(substr($user['name'] ?? $user['email'],0,1)); ?></div>
-      <div class="hero-pill">XP <?php echo (int)$user['points']; ?> • Lv <?php echo (int)$user['level']; ?></div>
-    </div>
-  </header>
-
   <main class="dirt-bg">
     <div class="game-stage">
       <div class="arcade-shell">
-        <h2 class="text-center mb-2 gametext">ÄVENTYRET VÄNTAR!</h2>
-        <p class="text-center small">Gå genom uppgifter och tjäna XP!</p>
+        <h2 class="text-center mb-4 gametext">ÄVENTYRET VÄNTAR!</h2>
 
         <a href="exercises/entrance.php" class="enter-btn" role="button" aria-label="Enter - Starta övningar">
-          <div class="big">ENTER</div>
-          <div class="small">Starta spelandet & tjäna XP</div>
+          <div class="big gametext">STARTA SPELA</div>
+          <div class="small gametext">Spela & tjäna XP</div>
         </a>
 
         <div class="secondary-buttons">
-          <a href="profile.php" class="secondary-btn" role="button">Profile</a>
+          <a href="profile.php" class="secondary-btn" role="button">Profil</a>
           <a href="auth/signout.php" class="secondary-btn" role="button">Logga ut</a>
         </div>
       </div>

@@ -49,7 +49,7 @@ function formatTime($seconds) {
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
         <h2 class="mb-1 gametext">Välj ditt uppdrag</h2>
-        <p class="mb-0">Nivå <?php echo (int)$user['level']; ?> • <?php echo (int)$user['points']; ?> XP</p>
+        <p class="mb-0 gametext">Nivå <?php echo (int)$user['level']; ?> • <?php echo (int)$user['points']; ?> XP</p>
       </div>
       <a href="../menu.php" class="btn btn-outline-light">← Tillbaka</a>
     </div>
@@ -71,20 +71,20 @@ function formatTime($seconds) {
           <div class="exercise-card <?php echo $locked ? 'locked' : ''; ?>">
             <div class="d-flex justify-content-between align-items-start mb-2">
               <div>
-                <h5 class="mb-2"><?php echo htmlspecialchars($r['title']); ?></h5>
-                <span class="difficulty-badge difficulty-<?php echo htmlspecialchars($r['difficulty']); ?>">
+                <h5 class="mb-2 gametext-small"><?php echo htmlspecialchars($r['title']); ?></h5>
+                <span style="font-size: 0.75rem  ;" class="gametext-smaller difficulty-badge difficulty-<?php echo htmlspecialchars($r['difficulty']); ?>">
                   <?php echo ucfirst($r['difficulty']); ?>
                 </span>
               </div>
               
               <?php if ($locked): ?>
                 <div class="text-end">
-                  <div class="badge bg-danger mb-2">🔒 Låst</div>
+                  <div class="badge bg-danger mb-2 gametext-smaller" style="padding: 0.25rem 0.5rem;">Låst</div>
                   <div class="small">Kräver nivå <?php echo (int)$r['min_level']; ?></div>
                 </div>
               <?php else: ?>
-                <a href="play.php?exercise_id=<?php echo (int)$r['id']; ?>" class="play-btn">
-                  <?php echo $hasCompleted ? 'Gör igen' : 'Starta'; ?>
+                <a href="play.php?exercise_id=<?php echo (int)$r['id']; ?>" class="play-btn gametext-smaller">
+                  <?php echo $hasCompleted ? 'Spela' : 'Starta'; ?>
                 </a>
               <?php endif; ?>
             </div>

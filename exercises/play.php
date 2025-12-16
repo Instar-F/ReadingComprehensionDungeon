@@ -8,8 +8,6 @@ if (!is_logged_in()) {
     exit;
 }
 
-error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
-
 $user = current_user($pdo);
 $userId = (int)$user['id'];
 
@@ -68,25 +66,22 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
             $meta = $question['meta'] ? json_decode($question['meta'], true) : [];
             $pointsForQuestion = isset($meta['points']) ? (int)$meta['points'] : 10;
 
-
-            // Enhanced ordering scoring helper
             
             $computeOrderingScore = function(array $userOrder, array $correctOrder, array $weights, array $options) {
                 $totalItems = count($correctOrder);
                 $result = [
-                    'order_accuracy' => 0.0,           // 1 - inversions/max_inversions
+                    'order_accuracy' => 0.0,
                     'inversions' => 0,
                     'max_inversions' => 0,
-                    'offs_sum' => 0,                   // sum of absolute position differences
-                    'offs_norm' => 0.0,                // normalized offs sum in [0,1]
-                    'present_ratio' => 0.0,            // presentCount/totalItems
+                    'offs_sum' => 0,
+                    'offs_norm' => 0.0,
+                    'present_ratio' => 0.0,
                     'final_ratio' => 0.0,
                     'exact_position_ids' => []
                 ];
                 if ($totalItems === 0) return $result;
 
-                // Normalize user order: keep only unique IDs that exist in correctOrder, preserve first occurrence
-                $setCorrect = array_flip($correctOrder); // id => pos
+                $setCorrect = array_flip($correctOrder);
                 $normalized = [];
                 $seen = [];
                 foreach ($userOrder as $id) {
@@ -174,36 +169,36 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
 
 
                 // Options and defaults for blended scoring and softening
-                $nearT = (int)($options['near_threshold'] ?? 1);
-                $farT  = (int)($options['far_threshold'] ?? 3);
+                $nearThreshold = (int)($options['near_threshold'] ?? 1);
+                $farThreshold  = (int)($options['far_threshold'] ?? 3);
                 $softFactor = (float)($options['near_soft_factor'] ?? 0.5); // reduce penalty when exactly one far-off item
-                $wInv = (float)($options['weight_inversion'] ?? 0.5);
-                $wOffs = (float)($options['weight_offs'] ?? 0.5);
-                $wExact = (float)($options['weight_exact_positions'] ?? 0.5); // new weight: exact positions count
-                $alpha = (float)($options['accuracy_alpha'] ?? 0.9);
+                $weightInversion = (float)($options['weight_inversion'] ?? 0.5);
+                $weightOffs = (float)($options['weight_offs'] ?? 0.5);
+                $weightExactPositions = (float)($options['weight_exact_positions'] ?? 0.5); // new weight: exact positions count
+                $accuracyAlpha = (float)($options['accuracy_alpha'] ?? 0.9);
                 // Clamp sensible ranges
                 $softFactor = max(0.0, min(1.0, $softFactor));
-                $wInv = max(0.0, min(1.0, $wInv));
-                $wOffs = max(0.0, min(1.0, $wOffs));
-                $wExact = max(0.0, min(1.0, $wExact));
+                $weightInversion = max(0.0, min(1.0, $weightInversion));
+                $weightOffs = max(0.0, min(1.0, $weightOffs));
+                $weightExactPositions = max(0.0, min(1.0, $weightExactPositions));
 
                 // Normalize to sum 1 across the three components
-                $sumW = $wInv + $wOffs + $wExact;
+                $sumW = $weightInversion + $weightOffs + $weightExactPositions;
                 if ($sumW > 0) {
-                    $wInv /= $sumW;
-                    $wOffs /= $sumW;
-                    $wExact /= $sumW;
+                    $weightInversion /= $sumW;
+                    $weightOffs /= $sumW;
+                    $weightExactPositions /= $sumW;
                 } else {
-                    $wInv = 1.0; $wOffs = 0.0; $wExact = 0.0;
+                    $weightInversion = 1.0; $weightOffs = 0.0; $weightExactPositions = 0.0;
                 }
 
-                $alpha = max(0.5, min(2.0, $alpha));
+                $accuracyAlpha = max(0.5, min(2.0, $accuracyAlpha));
 
                 // Near-perfect softening: if exactly one far-off item and others near or exact
                 $farCount = 0; $nearOrExactCount = 0;
                 foreach ($perItems as $pi) {
-                    if ($pi['offs'] >= $farT) $farCount++;
-                    elseif ($pi['offs'] <= $nearT) $nearOrExactCount++;
+                    if ($pi['offs'] >= $farThreshold) $farCount++;
+                    elseif ($pi['offs'] <= $nearThreshold) $nearOrExactCount++;
                 }
                 $invEff = $inv;
                 if ($farCount === 1 && ($nearOrExactCount >= ($totalItems - 1))) {
@@ -219,11 +214,11 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 $offsPct = $totalItems > 0 ? ($offsCount / $totalItems) : 0.0;
 
                 // Blended base using inversions, offs displacement and exact-position ratio
-                $base = ($wInv * $orderAcc) + ($wOffs * (1.0 - $offsNorm)) + ($wExact * $exactPositionsRatio);
+                $base = ($weightInversion * $orderAcc) + ($weightOffs * (1.0 - $offsNorm)) + ($weightExactPositions * $exactPositionsRatio);
                 // Presence scaling
                 $base *= $result['present_ratio'];
                 // Gentle non-linear mapping
-                $final = max(0.0, min(1.0, pow(max(0.0, min(1.0, $base)), $alpha)));
+                $final = max(0.0, min(1.0, pow(max(0.0, min(1.0, $base)), $accuracyAlpha)));
 
                 $result['order_accuracy'] = $orderAcc;
                 $result['inversions'] = $invEff;
@@ -700,21 +695,21 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
     <div id="stage" class="card p-4">
 
     <div id="passageArea">
-        <h5 class="mb-3">Läs texten</h5>
+        <h5 class="mb-3 gametext-small">Läs texten</h5>
         <div id="passageContent"><?php echo htmlspecialchars($passage['content'] ?? ''); ?></div>
-        <button id="startBtn" class="btn btn-warning mt-3 w-100">Gå vidare till frågor →</button>
+        <button id="startBtn" class="btn game-btn mt-3 w-100 gametext-small">Gå vidare till frågor</button>
             <div class="mt-2 order-*">
-             <div class="mb-2"><strong>Din bästa prestation:</strong></div>
+             <div class="mb-2 gametext-small"><strong>Din bästa prestation:</strong></div>
                 <?php if ($bestAttempt): ?>
                 <div>Belöning: <?php echo htmlspecialchars($bestAttempt['reward']); ?></div>
                     <div>Poäng: <?php echo (int)$bestAttempt['score']; ?></div>
                     <div>Tid: <?php echo htmlspecialchars($bestAttempt['elapsed_time']); ?>s</div>
                 <?php else: ?>
-                    <div>Inga tidigare försök</div>
+                    <div gametext-small>Inga tidigare försök</div>
                 <?php endif; ?>
             </div>
-            <div class="mt-2 text-center">
-                    <strong>Belöningskrav:</strong>
+            <div class="mt-2 text-center ">
+                    <strong class="gametext-small">Belöningskrav:</strong>
                 <div class="mt-3">
                     <div class="req-item">
                             <img src="../assets/img/copper.png" class="req-icon"> 70% rätt
@@ -747,7 +742,7 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
       <div id="questionContent" class="mb-4"></div>
       <div id="answerArea" class="mb-4"></div>
 
-      <button id="confirmBtn" class="btn btn-primary w-100 mb-4">Bekräfta svar →</button>
+      <button id="confirmBtn" class="btn game-btn w-100 mb-4 gametext-small">Bekräfta svar</button>
 
       <!-- Progress Bar -->
       <div class="progress-wrapper">
@@ -777,8 +772,8 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 
       <!-- Action Buttons -->
       <div class="d-flex flex-column align-items-center gap-2 mt-4">
-        <button id="retryBtn" class="btn btn-secondary w-100">Försök igen</button>
-        <a href="../exercises/entrance.php" class="btn btn-primary w-100">Tillbaka till uppdrag</a>
+        <button id="retryBtn" class="btn game-btn-again w-100 gametext-small">Försök igen</button>
+        <a href="../exercises/entrance.php" class="btn game-btn w-100 gametext-small">Tillbaka till uppdrag</a>
       </div>
     </div>
 
@@ -1116,7 +1111,6 @@ function renderQuestion() {
         htmlContent += `<div class="small mt-2 fillblank-instruction">Välj rätt ord som passar i luckan:</div>`;
         questionContent.innerHTML = htmlContent;
 
-        // Render choices using the same list-group + button pattern as MCQ/TrueFalse
         const container = document.createElement('div');
         container.className = 'list-group';
         const choicesToShow = [...question.choices].sort(() => Math.random() - 0.5);
@@ -1403,28 +1397,31 @@ async function finishAttempt() {
 
             if (json.xp_earned > 0) {
                 scoreResult.innerHTML = `
-                    <h3>Du fick ${json.xp_earned} XP</h3>
-                    <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
-                    <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
-                    <div>% av EXP: ${json.EXPpercentage}%</div>
+                    <div class="gametext-small">
+                        <h3>Du fick ${json.xp_earned} XP</h3>
+                        <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
+                        <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
+                    </div>
                 `;
                 rewardImg.src = '../assets/img/' + json.reward + '.png';
                 rewardImg.style.display = 'block';
             } else {
                 if (json.maxed_out) {
                     scoreResult.innerHTML = `
+                    <div class="gametext-small">
                         <h3>Du tjänade 0 XP!</h3>
                         <h4>Du har redan tjänat allt du kan från denna uppgift.</h4>
                         <div>Bas: ${json.base_xp} | Bonus: ${json.bonus_xp}</div>
                         <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
-                        <div>% av EXP: ${json.EXPpercentage}%</div>
+                    </div>
                     `;
                 } else {
                     scoreResult.innerHTML = `
+                    <div class="gametext-small">
                         <h3>Tyvärr, du fick 0 XP denna gång</h3>
                         <h4>Försök igen för att tjäna XP.</h4>
                         <div>Belöning: ${json.reward} – ${json.percentage}% ${json.percentage_type === 'exp' ? 'EXP' : 'Rätt'}</div>
-                        <div>% av EXP: ${json.EXPpercentage}%</div>
+                    </div>
                     `;
                 }
                 rewardImg.style.display = 'none';

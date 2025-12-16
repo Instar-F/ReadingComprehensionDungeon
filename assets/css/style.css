@@ -13,31 +13,17 @@ body {
 
 .card { 
     box-shadow: 0 1px 2px rgba(0,0,0,0.03); 
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
     border: none;
     color: white;
     border-radius: 12px;
-}
-
-.display-6 { 
-    font-size: 2.2rem; 
 }
 
 /* === BUTTONS === */
 .btn { 
     padding: .6rem .9rem;
     transition: all 0.2s;
-}
-
-.btn-light:hover { 
-    transform: translateY(-2px); 
-    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.2); 
-}
-
-.btn-light.active { 
-    background: #ffc107; 
-    color: #000; 
-    border-color: #ffc107; 
 }
 
 .btn:disabled {
@@ -61,6 +47,15 @@ body {
     color: #f3f4f6;
     background-image: url('../img/sky.webp');
     background-repeat: no-repeat;
+    background-position: center center;
+    background-size: cover; /* ensure the image fills the viewport */
+    background-attachment: fixed; /* subtle parallax on large screens */
+    background-color: #0d2032; /* fallback color if image not available */
+}
+
+/* On small screens avoid fixed attachment (better performance & UX) */
+@media (max-width: 767px) {
+    .sky-bg { background-attachment: scroll; }
 }
 
 .dungeon-bg {
@@ -72,7 +67,16 @@ body {
 .gametext {
     font-family: 'Press Start 2P', monospace;
     letter-spacing: 1px;
-    color: #fff;
+}
+.gametext-small {
+    font-family: 'Press Start 2P', monospace;
+    letter-spacing: 1px;
+    font-size: 0.85rem;
+}
+.gametext-smaller {
+    font-family: 'Press Start 2P', monospace;
+    letter-spacing: 1px;
+    font-size: 0.5rem;
 }
 
 /* === GAME STAGE & CONTAINER === */
@@ -84,6 +88,23 @@ body {
     min-height: 100vh;
     z-index: 1;
 }
+
+/* === AUTH / LOGIN / SIGNUP === */
+.auth-card {
+    width: 100%;
+    max-width: 460px;
+    padding: 1.25rem;
+    border-radius: 12px;
+}
+.auth-subtitle {
+    color: rgba(255,255,255,0.85);
+    font-size: 0.95rem;
+}
+.auth-link {
+    color: rgba(255, 193, 7, 0.95);
+    text-decoration: none;
+}
+.auth-link:hover { text-decoration: underline; }
 
 .game-stage {
     position: relative;
@@ -169,8 +190,7 @@ body {
 
 .play-btn {
     border-radius: 14px;
-    background: #f8f9fa;
-    color: #111827;
+    color: white;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -178,12 +198,21 @@ body {
     font-weight: 750;
     text-decoration: none;
     transition: transform .15s ease, box-shadow .15s ease;
-    border: 1px solid transparent;
+    border: 5px solid  #ffcb6b;
     padding: .375rem .75rem;
     font-size: 1rem;
     line-height: 1.5;
 }
-
+.game-btn{
+    background: linear-gradient(180deg, #ffcb6b, #b97514);
+    border-color: black;
+    color: #111827;
+}
+.game-btn-again {
+    background: linear-gradient(180deg, #ffffff, #999999);
+    border-color: black;
+    color: #111827;
+}
 .play-btn:hover, 
 .play-btn:focus { 
     transform: translateY(-1px) scale(1.02); 
@@ -452,7 +481,12 @@ textarea.form-control:focus {
     padding: 1.5rem;
     margin-bottom: 1.5rem;
     backdrop-filter: blur(10px);
+    display: block;
 }
+
+/* Make the internal rows wrap nicely on small screens */
+.profile-header-compact .row { align-items: center; }
+.profile-header-compact .col-md-2, .profile-header-compact .col-md-10 { flex: 0 0 auto; }
 
 .profile-avatar {
     width: 60px; 
@@ -497,7 +531,6 @@ textarea.form-control:focus {
     background: rgba(0, 0, 0, 0.4);
     border-radius: 12px;
     padding: 1.5rem;
-    margin-bottom: 1.5rem;
     backdrop-filter: blur(10px);
 }
 
@@ -516,6 +549,25 @@ textarea.form-control:focus {
     padding: 1rem;
     border-radius: 8px;
     margin-bottom: 0.75rem;
+}
+
+/* Scroll container for storylines: keep the page layout but allow the list to scroll when long */
+/* Make section containers layout vertically so inner lists can stretch/scroll reliably in flex columns */
+.section-compact { display: flex; flex-direction: column; }
+
+.storyline-list {
+    /* let the list take available vertical space and scroll internally like the badge list */
+    flex: 1 1 auto;
+    max-height: 420px; /* reasonable height for desktop */
+    overflow-y: auto;
+    padding-right: 8px; /* room for scrollbar */
+}
+
+@media (max-width: 767px) {
+    /* On narrow screens allow storylines to flow naturally */
+    .storyline-list { max-height: none; overflow: visible; padding-right: 0; }
+    /* Undo section flexing on narrow screens to keep natural flow */
+    .section-compact { display: block; }
 }
 
 .question-type-mini {
@@ -541,6 +593,7 @@ textarea.form-control:focus {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    position: relative; /* allow absolute pseudo-element to overlay */
 }
 
 .progress-circle-mini::before {
@@ -551,7 +604,6 @@ textarea.form-control:focus {
     background: rgba(0, 0, 0, 0.6);
     position: absolute;
 }
-
 .progress-text-mini {
     position: relative;
     z-index: 1;
@@ -589,10 +641,78 @@ textarea.form-control:focus {
     border-color: #ffc107;
 }
 
+.ProfileColumn {
+    display: flex;
+    flex-direction: column;
+    /* allow the column to shrink so internal scroll containers can work (important for flex parents) */
+    min-height: 0;
+}
+
 .badge-list-coc {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+    /* Make badges scrollable so the list doesn't push other sections down on wide screens */
+    overflow-y: auto;
+    padding-right: 6px; /* space for scrollbar */
+    max-height: 750px;
+}
+
+/* Responsive adjustments for profile */
+@media (max-width: 991px) {
+    .profile-header-compact { padding: 1rem; }
+    .profile-avatar { width: 72px; height: 72px; font-size: 28px; }
+    .stat-mini-value { font-size: 1.25rem; }
+    .progress-circle-mini { width: 44px; height: 44px; }
+}
+
+@media (max-width: 767px) {
+    /* Stack the header compact layout vertically */
+    .profile-header-compact .row { flex-direction: column; }
+    .profile-header-compact .col-md-2 { text-align: center; }
+    .profile-header-compact .col-md-10 { width: 100%; }
+
+    /* Make profile columns flow naturally and avoid fixed heights */
+    .ProfileColumn { max-height: none; }
+
+    /* Let badges expand and take normal page flow (no internal scroll) */
+    .badge-list-coc { max-height: none; overflow: visible; padding-right: 0; }
+
+    /* Reduce padding on sections for small screens */
+    .section-compact { padding: 1rem; }
+
+    /* Smaller stat mini blocks */
+    .stat-mini { padding: 0.5rem; }
+    .stat-mini-value { font-size: 1.15rem; }
+
+    /* Hero top should be inline at the top on small screens */
+    .hero-top { position: static; justify-content: flex-end; margin: 0.75rem 0; }
+}
+
+/* === EQUAL HEIGHT COLUMNS === */
+.row.profile-equal { align-items: stretch; }
+.row.profile-equal > [class*="col-"] { display: flex; }
+.row.profile-equal > [class*="col-"] > .ProfileColumn { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+
+/* Make the badge section expand to fill the right column and allow the list to scroll */
+.section-compact.badge-section { flex: 1 1 auto; display: flex; flex-direction: column; }
+.badge-list-coc { flex: 1 1 auto; overflow-y: auto; }
+
+/* Slight scrollbar style for desktop to match theme */
+.badge-list-coc::-webkit-scrollbar { width: 10px; }
+.badge-list-coc::-webkit-scrollbar-thumb { background: rgba(255,193,7,0.25); border-radius: 10px; }
+.badge-list-coc { scrollbar-width: thin; scrollbar-color: rgba(255,193,7,0.25) transparent; }
+
+/* Storyline list - use same scrollbar styling so both columns feel consistent */
+.storyline-list::-webkit-scrollbar { width: 10px; }
+.storyline-list::-webkit-scrollbar-thumb { background: rgba(255,193,7,0.25); border-radius: 10px; }
+.storyline-list { scrollbar-width: thin; scrollbar-color: rgba(255,193,7,0.25) transparent; }
+
+/* Ensure the badge section lays out vertically to allow the list to flex */
+.section-compact.badge-section {
+    display: flex;
+    flex-direction: column;
+    max-height: inherit;
 }
 
 .badge-card-coc {
@@ -689,41 +809,6 @@ textarea.form-control:focus {
     color: rgba(255, 255, 255, 0.6);
 }
 
-/* === ADMIN STYLES === */
-.admin-card {
-    background: rgba(0, 0, 0, 0.5);
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-    backdrop-filter: blur(10px);
-}
-
-.nav-tabs .nav-link {
-    color: rgba(255, 255, 255, 0.7);
-    border: none;
-    background: transparent;
-}
-
-.nav-tabs .nav-link:hover {
-    color: white;
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.nav-tabs .nav-link.active {
-    color: #ffc107;
-    background: rgba(255, 193, 7, 0.1);
-    border-bottom: 2px solid #ffc107;
-}
-
-.table-dark {
-    --bs-table-bg: rgba(0, 0, 0, 0.3);
-    --bs-table-border-color: rgba(255, 255, 255, 0.1);
-}
-
-.table-dark tbody tr:hover {
-    background: rgba(255, 255, 255, 0.05);
-}
-
 /* === QUESTION/QUIZ STYLES === */
 .quiz-card {
     background: rgba(0, 0, 0, 0.6);
@@ -771,19 +856,16 @@ textarea.form-control:focus {
 
 /* === FILL-IN-THE-BLANK STYLES === */
 .fillblank-container {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 1.5rem;
-    border-radius: 12px;
-    border: 2px solid rgba(255, 193, 7, 0.2);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background: transparent;
 }
 
 .fillblank-text {
-    font-size: 1.2rem;
-    line-height: 1.8;
-    padding: 1rem;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    text-align: center;
+    background: transparent;
+    border-radius: 4px;
+    text-align: left;
 }
 
 .fillblank-text .text-part {
@@ -792,51 +874,35 @@ textarea.form-control:focus {
 
 .fillblank-text .blank-marker {
     display: inline-block;
-    min-width: 120px;
-    padding: 0.25rem 0.75rem;
-    margin: 0 0.5rem;
-    background: rgba(255, 193, 7, 0.3);
-    border-bottom: 3px solid rgba(255, 193, 7, 0.8);
+    padding: 0.15rem 0.5rem;
+    margin: 0 0.35rem;
+    background: rgba(255, 193, 7, 0.12);
+    border-bottom: 2px solid rgba(255, 193, 7, 0.45);
     border-radius: 4px;
-    font-weight: bold;
+    font-weight: 600;
     color: #ffc107;
-    animation: pulse 2s ease-in-out infinite;
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
 }
 
 .fillblank-text .blank-marker.filled {
-    background: rgba(255, 193, 7, 0.5);
-    border-bottom-color: #ffc107;
+    background: rgba(255, 193, 7, 0.28);
     color: #fff;
-    animation: none;
-    font-size: 1.1em;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+    border-bottom-color: #ffc107;
+    font-size: 1em;
 }
 
 .fillblank-instruction {
-    font-size: 0.95rem;
-    color: rgba(255, 193, 7, 0.9);
-    font-weight: 500;
-    text-align: center;
-}
-
-.fillblank-choice {
-    background: rgba(255, 255, 255, 0.08) !important;
-    border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.fillblank-choice:hover {
-    background: rgba(255, 255, 255, 0.12) !important;
-    border-color: rgba(255, 193, 7, 0.4) !important;
+    font-size: 1rem;
+    font-weight: 400;
+    text-align: left;
+    margin-bottom: 0.5rem;
 }
 
 .fillblank-choice.active {
-    background: rgba(255, 193, 7, 0.2) !important;
-    border-color: rgba(255, 193, 7, 0.8) !important;
+    /* match .answer-btn.active behavior */
+    transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+    border-color: rgba(255, 193, 7, 0.4);
 }
 
 /* === ORDERING STYLES === */
