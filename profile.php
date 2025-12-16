@@ -132,7 +132,7 @@ $questionTypeNames = [
 <main class="dirt-bg">
 <div class="container compact-profile py-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="mb-1 gametext">📊 MIN PROFIL</h2>
+        <h2 class="mb-1 gametext">DIN PROFIL</h2>
         <a href="menu.php" class="btn btn-outline-light">← Tillbaka</a>
     </div>
 
@@ -193,7 +193,7 @@ $questionTypeNames = [
 
     <div class="row mt-4">
         <!-- Left Column -->
-        <div class="col-12 col-lg-6">
+        <div class="col-12 col-lg-6 ProfileColumn">
             <!-- Storyline Progress -->
             <?php if (!empty($storylineProgress)): ?>
             <div class="section-compact mb-4">
@@ -244,7 +244,7 @@ $questionTypeNames = [
                                         <?= htmlspecialchars($questionTypeNames[$qs['type']] ?? $qs['type']) ?>
                                     </div>
                                     <div style="font-size: 0.75rem; color: rgba(255, 255, 255, 0.6);">
-                                        <?= $qs['exercises_completed'] ?> / <?= $qs['total_exercises'] ?> övningar • ~<?= $performance ?>% prestanda
+                                        <?= $qs['exercises_completed'] ?> / <?= $qs['total_exercises'] ?> övningar  <br> ~<?= $performance ?>% prestanda
                                     </div>
                                 </div>
                                 <div class="progress-circle-mini" style="--progress: <?= $completion ?>;">
@@ -260,9 +260,9 @@ $questionTypeNames = [
         </div>
 
         <!-- Right Column -->
-        <div class="col-12 col-lg-6">
+        <div class="col-12 col-lg-6 ProfileColumn">
             <!-- Badges Section -->
-            <div class="section-compact">
+            <div class="section-compact badge-section">
                 <div class="section-title">
                     <i class="fas fa-trophy"></i> Utmärkelser
                     <span style="margin-left: auto; font-size: 0.875rem; color: rgba(255, 193, 7, 0.8);">

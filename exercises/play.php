@@ -158,37 +158,45 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 // Build per-item offs list based on normalizedFull
                 $perItems = [];
                 $limit = min($totalItems, count($normalizedFull));
+                $offsCount = 0;
                 for ($i = 0; $i < $limit; $i++) {
                     $id = (int)$normalizedFull[$i];
                     $correctPos = (int)$setCorrect[$id];
+                    $offs = abs($i - $correctPos);
+                    if ($offs > 0) $offsCount++;
                     $perItems[] = [
                         'id' => $id,
                         'current_pos' => $i,
                         'correct_pos' => $correctPos,
-                        'offs' => abs($i - $correctPos)
+                        'offs' => $offs
                     ];
                 }
 
 
                 // Options and defaults for blended scoring and softening
                 $nearT = (int)($options['near_threshold'] ?? 1);
-                $farT  = (int)($options['far_threshold'] ?? 2);
+                $farT  = (int)($options['far_threshold'] ?? 3);
                 $softFactor = (float)($options['near_soft_factor'] ?? 0.5); // reduce penalty when exactly one far-off item
-                $wInv = (float)($options['weight_inversion'] ?? 0.7);
-                $wOffs = (float)($options['weight_offs'] ?? 0.3);
+                $wInv = (float)($options['weight_inversion'] ?? 0.5);
+                $wOffs = (float)($options['weight_offs'] ?? 0.5);
+                $wExact = (float)($options['weight_exact_positions'] ?? 0.5); // new weight: exact positions count
                 $alpha = (float)($options['accuracy_alpha'] ?? 0.9);
                 // Clamp sensible ranges
                 $softFactor = max(0.0, min(1.0, $softFactor));
                 $wInv = max(0.0, min(1.0, $wInv));
                 $wOffs = max(0.0, min(1.0, $wOffs));
-                if (($wInv + $wOffs) > 0) {
-                    // normalize to sum 1
-                    $sumW = $wInv + $wOffs;
+                $wExact = max(0.0, min(1.0, $wExact));
+
+                // Normalize to sum 1 across the three components
+                $sumW = $wInv + $wOffs + $wExact;
+                if ($sumW > 0) {
                     $wInv /= $sumW;
                     $wOffs /= $sumW;
+                    $wExact /= $sumW;
                 } else {
-                    $wInv = 1.0; $wOffs = 0.0;
+                    $wInv = 1.0; $wOffs = 0.0; $wExact = 0.0;
                 }
+
                 $alpha = max(0.5, min(2.0, $alpha));
 
                 // Near-perfect softening: if exactly one far-off item and others near or exact
@@ -205,8 +213,13 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 // Order accuracy from effective inversions
                 $orderAcc = ($maxInv > 0) ? (1.0 - ($invEff / $maxInv)) : 1.0; // if n<2, treat as fully ordered
 
-                // Blended base using inversions and offs
-                $base = ($wInv * $orderAcc) + ($wOffs * (1.0 - $offsNorm));
+                // Exact positions ratio and offs percentage
+                $exactPositionsCount = count($exactIds);
+                $exactPositionsRatio = $totalItems > 0 ? ($exactPositionsCount / $totalItems) : 0.0;
+                $offsPct = $totalItems > 0 ? ($offsCount / $totalItems) : 0.0;
+
+                // Blended base using inversions, offs displacement and exact-position ratio
+                $base = ($wInv * $orderAcc) + ($wOffs * (1.0 - $offsNorm)) + ($wExact * $exactPositionsRatio);
                 // Presence scaling
                 $base *= $result['present_ratio'];
                 // Gentle non-linear mapping
@@ -217,6 +230,10 @@ if ($method === 'POST' && strpos($contentType, 'application/json') !== false) {
                 $result['max_inversions'] = $maxInv;
                 $result['offs_sum'] = $sumDisp;
                 $result['offs_norm'] = $offsNorm;
+                $result['exact_positions_count'] = $exactPositionsCount;
+                $result['exact_positions_ratio'] = $exactPositionsRatio;
+                $result['offs_count'] = $offsCount;
+                $result['offs_pct'] = $offsPct;
                 $result['final_ratio'] = $final;
                 $result['exact_position_ids'] = $exactIds;
 
@@ -641,6 +658,15 @@ foreach ($questions as $q) {
     ];
 }
 
+// Detect if this exercise is purely ordering (every question is type 'ordering')
+$isSortingExercise = false;
+if (!empty($clientQuestions)) {
+    $isSortingExercise = true;
+    foreach ($clientQuestions as $cq) {
+        if (($cq['type'] ?? '') !== 'ordering') { $isSortingExercise = false; break; }
+    }
+}
+
 $bestStmt = $pdo->prepare("
     SELECT reward, score, elapsed_time 
     FROM attempt_sessions 
@@ -658,6 +684,7 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?php echo htmlspecialchars($exercise['title']); ?> — Öva</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../assets/css/style.css">
 <link rel="stylesheet" href="../assets/css/achievement-notifications.css">
 </head>
@@ -668,7 +695,7 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-    <h1 class="mb-0"><?php echo htmlspecialchars($exercise['title']); ?></h1>
+    <h1 class="gametext mb-0"><?php echo htmlspecialchars($exercise['title']); ?></h1>
     <a href="../exercises/entrance.php" class="btn btn-outline-light">← Tillbaka</a>
   </div>
     <div id="stage" class="card p-4">
@@ -763,6 +790,13 @@ $bestAttempt = $bestStmt->fetch(PDO::FETCH_ASSOC);
 const userId = <?php echo (int)$userId; ?>;
 const exerciseId = <?php echo (int)$exerciseId; ?>;
 const questions = <?php echo json_encode($clientQuestions, JSON_UNESCAPED_UNICODE); ?>;
+const isSortingExercise = <?php echo ($isSortingExercise ? 'true' : 'false'); ?>; // server-detected "pure ordering" flag
+let orderingResults = {}; // store per-question breakdowns and awarded points
+
+// If this is a purely ordering exercise, hide progress bars (not meaningful for pure order tasks)
+if (isSortingExercise) {
+    document.querySelectorAll('.progress-wrapper').forEach(el => el.style.display = 'none');
+}
 
 // Shuffle questions to randomize order
 function shuffleArray(array) {
@@ -950,15 +984,71 @@ function showOrderingFeedback(breakdown, question) {
         answerArea.appendChild(panel);
     }
     const pct = v => Math.round((v || 0) * 100);
+    const exactCount = breakdown.exact_positions_count ?? (Array.isArray(breakdown.exact_position_ids) ? (breakdown.exact_position_ids.length) : 0);
     panel.innerHTML = `
         <div class="small">
             <strong>Poängberäkning:</strong>
             <div>Ordningens noggrannhet: ${pct(breakdown.order_accuracy)}%</div>
+            <div>Exakta positioner: ${pct(breakdown.exact_positions_ratio)}% (${exactCount}/${(question.meta.items||[]).length})</div>
+            <div>Felplacerade element: ${pct(breakdown.offs_pct)}%</div>
             <div>Inversioner: ${breakdown.inversions} / ${breakdown.max_inversions}</div>
             <div>Offs (normaliserat): ${pct(breakdown.offs_norm)}%</div>
         </div>
     `;
 }
+
+// Render a friendly, detailed "Poängberäkning" on the results screen for pure ordering exercises
+function renderPoangberakning(json) {
+    const containerId = 'poangCalculation';
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.className = 'point-breakdown mt-4 p-3 bg-dark bg-opacity-10 rounded';
+        scoreArea.appendChild(container);
+    }
+
+    let html = `<h4>Poängberäkning</h4>`;
+    html += `<div class="small">Här ser du hur poängen räknades fram för varje fråga och hur slutpoängen beräknades.</div>`;
+    html += `<div class="mt-2">`;
+
+    let totalAwarded = 0;
+    let totalPossible = 0;
+
+    questions.forEach((q, idx) => {
+        if (q.type !== 'ordering') return;
+        const qNum = idx + 1;
+        const r = orderingResults[q.id];
+        const pointsPossible = (q.meta && q.meta.points) ? q.meta.points : 10;
+        const awarded = r ? (r.points_awarded || 0) : 0;
+        totalAwarded += awarded;
+        totalPossible += pointsPossible;
+
+        if (r && r.breakdown) {
+            const b = r.breakdown;
+            const finalRatio = (b.final_ratio || 0);
+            html += `<div class="mb-3">`;
+            html += `<strong>Fråga ${qNum}:</strong> ${q.content ? q.content : ''}<br>`;
+            html += `Ordningens noggrannhet: ${Math.round((b.order_accuracy||0)*100)}% &nbsp; | &nbsp; Exakta positioner: ${Math.round((b.exact_positions_ratio||0)*100)}% (${b.exact_positions_count||0}/${(q.meta.items||[]).length})<br>`;
+            html += `Felplacerade element: ${Math.round((b.offs_pct||0)*100)}% &nbsp; | &nbsp; Inversioner: ${b.inversions || 0} / ${b.max_inversions || 0} &nbsp; | &nbsp; Offs (normaliserat): ${Math.round((b.offs_norm||0)*100)}%<br>`;
+            html += `<strong>Slutpoäng (ratio):</strong> ${Math.round(finalRatio*100)}% &nbsp; → <strong>Poäng:</strong> ${awarded} / ${pointsPossible}<br>`;
+            html += `<div class="small">Beräkning: Poäng = round(${pointsPossible} × ${finalRatio.toFixed(3)}) = ${awarded}</div>`;
+            html += `</div>`;
+        } else {
+            html += `<div class="mb-2"><strong>Fråga ${qNum}:</strong> Ingen data – Poäng: ${awarded} / ${pointsPossible}</div>`;
+        }
+    });
+
+    const percent = totalPossible > 0 ? ((totalAwarded / totalPossible) * 100) : 0;
+    html += `<hr>`;
+    html += `<div><strong>Totalt:</strong> ${totalAwarded} / ${totalPossible} → ${percent.toFixed(1)}%</div>`;
+    html += `<div class="small mt-1"><strong>Beräkning:</strong> (${totalAwarded} / ${totalPossible}) × 100 = ${percent.toFixed(1)}%</div>`;
+
+    html += `</div>`;
+
+    container.innerHTML = html;
+}
+
 function renderQuestion() {
     const question = questions[currentQuestionIndex];
     questionCounter.textContent = `Fråga ${currentQuestionIndex + 1} av ${questions.length}`;
@@ -1277,6 +1367,13 @@ async function confirmAnswer() {
 
         if (question.type === 'ordering' && result.breakdown) {
             try {
+                // Store breakdown and awarded points for final summary
+                orderingResults[question.id] = {
+                    breakdown: result.breakdown,
+                    points_awarded: (result.points_awarded || 0),
+                    points_possible: (question.meta && question.meta.points) ? question.meta.points : 10
+                };
+
                 showOrderingFeedback(result.breakdown, question);
                 // Keep results displayed until next press
                 waitingToAdvance = true;
@@ -1334,7 +1431,8 @@ async function finishAttempt() {
                 updateProgress(false, finalScoreProgressBar, finalScoreMarkersDiv, null);
                 
                 setTimeout(() => {
-                    finalScoreProgressBar.style.width = '100%';
+                    // Use server-provided percentage rather than forcing 100%
+                    finalScoreProgressBar.style.width = (json.percentage || 0) + '%';
                 }, 100);
             }
 
@@ -1374,11 +1472,18 @@ async function finishAttempt() {
                 levelBanner.style.display = 'none';
             }
 
+            // If this is a pure ordering exercise, render a detailed "Poängberäkning" panel
+            if (isSortingExercise) {
+                renderPoangberakning(json);
+            }
+
             // Show final progress bar in score area
             const scoreProgressBar = document.getElementById('scoreProgressBar');
             const scoreMarkersDiv = document.getElementById('scoreMarkers');
             if (scoreProgressBar && scoreMarkersDiv) {
                 updateProgress(false, scoreProgressBar, scoreMarkersDiv, null);
+                // If visible, set width to server percentage
+                scoreProgressBar.style.width = (json.percentage || 0) + '%';
             }
             // Trigger badge check after short delay
             setTimeout(() => {
