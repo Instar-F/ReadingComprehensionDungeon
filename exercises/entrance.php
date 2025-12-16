@@ -20,7 +20,7 @@ $sql = "
             ORDER BY elapsed_time ASC LIMIT 1) as best_time
     FROM exercises e
     LEFT JOIN exercise_passages ep ON ep.exercise_id = e.id
-    ORDER BY FIELD(e.difficulty,'easy','medium','hard'), e.created_at DESC
+    ORDER BY e.min_level ASC, FIELD(e.difficulty,'easy','medium','hard'), e.created_at DESC
 ";
 $stmt = $pdo->prepare($sql);
 $stmt->execute([$user['id'], $user['id'], $user['id']]);
